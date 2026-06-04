@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { LayoutDashboard, Activity, TrendingUp, ShieldAlert, Send, Cpu, RefreshCw } from 'lucide-react';
+import { LayoutDashboard, Activity, TrendingUp, ShieldAlert, Send, Cpu, RefreshCw, Radio, WifiOff, Zap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { StatCard } from '../components/ui';
+import { StatCard, PanelHeader } from '../components/ui';
 import type { AgentNode, TradingBot, SystemAlert, TelegramMessage } from '../lib/types';
 import type { Page } from '../components/Layout';
+import { useAgent } from '../lib/agent';
+import { useSettings } from '../lib/settings';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts';
@@ -25,6 +27,11 @@ export default function Dashboard({ onNav }: Props) {
   const [loading, setLoading] = useState(true);
   const [btcSpark] = useState(() => genSparkline(67800));
   const [ethSpark] = useState(() => genSparkline(3840));
+  const { mode, connectionStatus, dbConnected, telegramConnected, heartbeat, goLive, testConnection } = useAgent();
+  const { allConfigured } = useSettings();
+
+  const isLive = mode === 'live' && dbConnected;
+  const telegramReady = allConfigured(['telegram_bot_token', 'telegram_chat_id']);
 
   useEffect(() => { load(); }, []);
 
@@ -57,14 +64,49 @@ export default function Dashboard({ onNav }: Props) {
             Command Center
           </h1>
           <p className="text-[10px] font-mono text-ares-textMuted mt-0.5 tracking-wider">
-            ARES OMNI-AGENT — REAL-TIME OPERATIONAL STATUS
+            ARES OMNI-AGENT — {isLive ? 'LIVE MODE' : 'SIMULATED MODE'}
           </p>
         </div>
-        <button onClick={load} className="btn btn-ghost">
-          <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
-          REFRESH
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={load} className="btn btn-ghost">
+            <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+            REFRESH
+          </button>
+          {!isLive && (
+            <button onClick={goLive} disabled={connectionStatus === 'connecting'} className="btn btn-green">
+              {connectionStatus === 'connecting' ? <RefreshCw size={11} className="animate-spin" /> : <Radio size={11} />}
+              {connectionStatus === 'connecting' ? 'CONNECTING...' : 'GO LIVE'}
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Live mode status banner */}
+      {isLive ? (
+        <div className="panel p-3 flex items-center gap-3 border-ares-green/30 bg-ares-green/5">
+          <Zap size={16} className="text-ares-green flex-shrink-0" />
+          <div className="flex-1">
+            <div className="text-[11px] font-mono font-bold text-ares-green">ARES OMNI-AGENT: ACTIVE</div>
+            <div className="text-[9px] font-mono text-ares-textMuted mt-0.5">
+              DB: Connected{telegramConnected ? ' | Telegram: Connected' : ' | Telegram: Pending'}{heartbeat.latencyMs !== null ? ` | Latency: ${heartbeat.latencyMs}ms` : ''} | Heartbeat: {heartbeat.intervalSec}s
+            </div>
+          </div>
+          <span className="w-2 h-2 rounded-full bg-ares-green pulse-online flex-shrink-0" />
+        </div>
+      ) : (
+        <div className="panel p-3 flex items-center gap-3 border-ares-amber/20 bg-ares-amber/5">
+          <WifiOff size={16} className="text-ares-amber flex-shrink-0" />
+          <div className="flex-1">
+            <div className="text-[11px] font-mono font-bold text-ares-amber">SIMULATED MODE</div>
+            <div className="text-[9px] font-mono text-ares-textMuted mt-0.5">
+              {!telegramReady ? 'Configure Telegram credentials in Settings to activate live mode' : 'Click "GO LIVE" to connect to real services'}
+            </div>
+          </div>
+          {!telegramReady && (
+            <button onClick={() => onNav('settings')} className="btn btn-amber py-0.5 px-2 text-[9px]">SETUP</button>
+          )}
+        </div>
+      )}
 
       {/* KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -177,6 +219,7 @@ export default function Dashboard({ onNav }: Props) {
           <div className="panel-header">
             <Send size={13} className="text-ares-cyan" />
             <span className="text-[10px] font-mono font-bold tracking-widest text-ares-text">TELEGRAM FEED</span>
+            {isLive && telegramConnected && <span className="ml-2 text-[8px] font-mono text-ares-green">● LIVE</span>}
             <button onClick={() => onNav('telegram')} className="ml-auto text-[9px] font-mono text-ares-textMuted hover:text-ares-cyan transition-colors">OPEN →</button>
           </div>
           <div className="divide-y divide-ares-border max-h-52 overflow-y-auto">

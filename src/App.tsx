@@ -12,6 +12,8 @@ import AmazonMonitor from './pages/AmazonMonitor';
 import SettingsPage from './pages/SettingsPage';
 import { SessionManager } from './lib/session';
 import { supabase } from './lib/supabase';
+import { SettingsProvider } from './lib/settings';
+import { AgentProvider } from './lib/agent';
 
 export default function App() {
   const [page, setPage]           = useState<Page>('dashboard');
@@ -96,8 +98,12 @@ export default function App() {
   };
 
   return (
-    <Layout page={page} onNav={setPage} unreadAlerts={unreadAlerts}>
-      {pages[page]}
-    </Layout>
+    <SettingsProvider>
+      <AgentProvider>
+        <Layout page={page} onNav={setPage} unreadAlerts={unreadAlerts}>
+          {pages[page]}
+        </Layout>
+      </AgentProvider>
+    </SettingsProvider>
   );
 }

@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Activity, Plus, RefreshCw, Wifi, WifiOff, Clock, Trash2, Edit2, Check, X } from 'lucide-react';
+import { Activity, Plus, RefreshCw, Wifi, WifiOff, Clock, Trash2, Edit2, Check, X, Radio } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Panel, PanelHeader, StatusDot, Empty } from '../components/ui';
 import type { AgentNode, HeartbeatEntry } from '../lib/types';
+import { useAgent } from '../lib/agent';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
 
 export default function HeartbeatMonitor() {
@@ -13,6 +14,8 @@ export default function HeartbeatMonitor() {
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState({ name: '', type: 'pc', endpoint_url: '', heartbeat_interval_sec: 30 });
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { mode, dbConnected, heartbeat: agentHeartbeat } = useAgent();
+  const isLive = mode === 'live' && dbConnected;
 
   useEffect(() => {
     loadNodes();
@@ -22,7 +25,10 @@ export default function HeartbeatMonitor() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'agent_nodes' }, () => loadNodes())
       .subscribe();
 
-    intervalRef.current = setInterval(simulateHeartbeats, 5000);
+    // In simulated mode, generate fake heartbeats. In live mode, the AgentProvider handles real pings.
+    if (!isLive) {
+      intervalRef.current = setInterval(simulateHeartbeats, 5000);
+    }
 
     return () => {
       supabase.removeChannel(ch);
@@ -126,7 +132,10 @@ export default function HeartbeatMonitor() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-base font-bold font-mono tracking-widest text-ares-green glow-green uppercase">Heartbeat Monitor</h1>
-          <p className="text-[10px] font-mono text-ares-textMuted mt-0.5">Real-time node health — autonomous polling every 5 seconds</p>
+          <p className="text-[10px] font-mono text-ares-textMuted mt-0.5">
+            {isLive ? 'Live mode — Agent heartbeat active' : 'Simulated mode — auto-polling every 5 seconds'}
+            {isLive && agentHeartbeat.latencyMs !== null && ` · Latency: ${agentHeartbeat.latencyMs}ms`}
+          </p>
         </div>
         <button onClick={() => setAddOpen(true)} className="btn btn-amber">
           <Plus size={11} /> ADD NODE

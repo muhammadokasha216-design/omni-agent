@@ -2,10 +2,9 @@ import { useState, useEffect } from 'react';
 import {
   LayoutDashboard, Activity, Send, TrendingUp, BarChart2,
   ShieldCheck, Menu, X, Zap, Bell, Circle,
-  FlaskConical, ShoppingCart, Settings,
+  FlaskConical, ShoppingCart, Settings, Radio, WifiOff,
 } from 'lucide-react';
-import type { SystemAlert } from '../lib/types';
-import { supabase } from '../lib/supabase';
+import { useAgent } from '../lib/agent';
 
 export type Page = 'dashboard' | 'heartbeat' | 'telegram' | 'trading' | 'market' | 'security' | 'simulation' | 'amazon' | 'settings';
 
@@ -28,6 +27,8 @@ interface SidebarProps {
 }
 
 function Sidebar({ page, onNav, unreadAlerts }: SidebarProps) {
+  const { mode, dbConnected } = useAgent();
+  const isLive = mode === 'live' && dbConnected;
   const now = new Date();
   return (
     <aside className="w-56 flex-shrink-0 flex flex-col bg-ares-surface border-r border-ares-border relative overflow-hidden">
@@ -40,7 +41,7 @@ function Sidebar({ page, onNav, unreadAlerts }: SidebarProps) {
           <div className="w-9 h-9 rounded bg-ares-elevated border border-ares-borderLit flex items-center justify-center">
             <Zap size={18} className="text-ares-amber" style={{ filter: 'drop-shadow(0 0 6px rgba(245,158,11,0.8))' }} />
           </div>
-          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-ares-green pulse-online" />
+          <span className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full ${isLive ? 'bg-ares-green pulse-online' : 'bg-ares-textMuted'}`} />
         </div>
         <div>
           <div className="text-sm font-bold font-mono tracking-widest text-ares-amber glow-amber">ARES</div>
@@ -113,11 +114,24 @@ interface LayoutProps {
 export default function Layout({ page, onNav, children, unreadAlerts }: LayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [clock, setClock] = useState(new Date());
+  const { mode, connectionStatus, dbConnected, telegramConnected, heartbeat, goLive } = useAgent();
 
   useEffect(() => {
     const t = setInterval(() => setClock(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  const isLive = mode === 'live' && dbConnected;
+  const statusColor = isLive
+    ? 'text-ares-green fill-ares-green'
+    : connectionStatus === 'connecting'
+    ? 'text-ares-amber fill-ares-amber'
+    : 'text-ares-red fill-ares-red';
+  const statusText = isLive
+    ? 'SYSTEM ACTIVE'
+    : connectionStatus === 'connecting'
+    ? 'CONNECTING...'
+    : 'SIMULATED';
 
   const currentNav = NAV.find(n => n.id === page)!;
 
@@ -157,9 +171,22 @@ export default function Layout({ page, onNav, children, unreadAlerts }: LayoutPr
           {/* Right side: status + time */}
           <div className="flex items-center gap-4 text-[10px] font-mono text-ares-textSub">
             <div className="hidden sm:flex items-center gap-1.5">
-              <Circle size={6} className="text-ares-green fill-ares-green animate-pulse" />
-              <span className="tracking-wider">SYS NOMINAL</span>
+              <Circle size={6} className={`${statusColor} animate-pulse`} />
+              <span className={`tracking-wider ${isLive ? 'text-ares-green font-bold' : connectionStatus === 'connecting' ? 'text-ares-amber' : 'text-ares-textMuted'}`}>
+                {statusText}
+              </span>
+              {isLive && telegramConnected && (
+                <span className="text-ares-cyan ml-1">TG</span>
+              )}
+              {isLive && heartbeat.latencyMs !== null && (
+                <span className="text-ares-textMuted ml-1">{heartbeat.latencyMs}ms</span>
+              )}
             </div>
+            {!isLive && (
+              <button onClick={goLive} className="btn btn-green py-0.5 px-2.5 text-[9px]">
+                <Radio size={9} /> GO LIVE
+              </button>
+            )}
             {unreadAlerts > 0 && (
               <button onClick={() => onNav('security')} className="flex items-center gap-1 text-ares-red">
                 <Bell size={12} />

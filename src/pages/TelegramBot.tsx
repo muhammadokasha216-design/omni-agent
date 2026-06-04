@@ -1,8 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
-import { Send, Terminal, RefreshCw, Trash2, Plus, X, Check, Bot } from 'lucide-react';
+import { Send, Terminal, RefreshCw, Trash2, Plus, X, Check, Bot, Radio, WifiOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Panel, PanelHeader, Badge, Empty } from '../components/ui';
 import type { TelegramMessage } from '../lib/types';
+import { useAgent } from '../lib/agent';
+import { useSettings } from '../lib/settings';
 
 const COMMAND_DOCS = [
   { cmd: '/status',   desc: 'Get current status of all nodes and bots' },
@@ -35,6 +37,9 @@ export default function TelegramBot() {
   const [sending, setSending] = useState(false);
   const [chatId, setChatId] = useState('100000001');
   const bottomRef = useRef<HTMLDivElement>(null);
+  const { mode, dbConnected, telegramConnected } = useAgent();
+  const { settings, isConfigured } = useSettings();
+  const isLive = mode === 'live' && dbConnected && telegramConnected;
 
   useEffect(() => {
     loadMessages();
@@ -65,7 +70,7 @@ export default function TelegramBot() {
     setInput('');
 
     try {
-      // Insert inbound message
+      // Insert inbound message to DB
       await supabase.from('telegram_messages').insert({
         direction: 'inbound',
         chat_id: chatId,
@@ -75,19 +80,37 @@ export default function TelegramBot() {
         processed_at: new Date().toISOString(),
       });
 
-      // Simulate bot processing delay
-      await new Promise(r => setTimeout(r, 400 + Math.random() * 600));
+      if (isLive) {
+        // LIVE mode: send the command as a real Telegram message via edge function
+        try {
+          await supabase.functions.invoke('telegram-relay', {
+            body: { action: 'send', message: cmd, chat_id: chatId },
+          });
+        } catch { /* non-blocking — edge function may fail */ }
 
-      // Insert outbound reply
-      const reply = getBotReply(cmd);
-      await supabase.from('telegram_messages').insert({
-        direction: 'outbound',
-        chat_id: chatId,
-        message_text: reply,
-        command: null,
-        status: 'processed',
-        processed_at: new Date().toISOString(),
-      });
+        // Also generate a local reply (the real bot will reply via webhook)
+        const reply = getBotReply(cmd);
+        await supabase.from('telegram_messages').insert({
+          direction: 'outbound',
+          chat_id: chatId,
+          message_text: `[SIMULATED] ${reply}`,
+          command: null,
+          status: 'processed',
+          processed_at: new Date().toISOString(),
+        });
+      } else {
+        // SIMULATED mode: generate local reply after delay
+        await new Promise(r => setTimeout(r, 400 + Math.random() * 600));
+        const reply = getBotReply(cmd);
+        await supabase.from('telegram_messages').insert({
+          direction: 'outbound',
+          chat_id: chatId,
+          message_text: reply,
+          command: null,
+          status: 'processed',
+          processed_at: new Date().toISOString(),
+        });
+      }
 
       loadMessages();
     } finally {
@@ -119,9 +142,15 @@ export default function TelegramBot() {
             <Bot size={13} className="text-ares-cyan" />
             <span className="text-[10px] font-mono font-bold tracking-widest text-ares-text">ARES BOT</span>
             <span className="ml-2 text-[9px] font-mono text-ares-textMuted">@AresOmniBot · Chat {chatId}</span>
-            <span className="ml-auto flex items-center gap-1.5 text-[9px] font-mono text-ares-green">
-              <span className="w-1.5 h-1.5 rounded-full bg-ares-green animate-pulse" /> ONLINE
-            </span>
+            {isLive ? (
+              <span className="ml-auto flex items-center gap-1.5 text-[9px] font-mono text-ares-green">
+                <Radio size={9} /> LIVE
+              </span>
+            ) : (
+              <span className="ml-auto flex items-center gap-1.5 text-[9px] font-mono text-ares-textMuted">
+                <WifiOff size={9} /> SIMULATED
+              </span>
+            )}
           </div>
 
           {/* Messages */}
