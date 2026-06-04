@@ -7,6 +7,9 @@ import TelegramBot from './pages/TelegramBot';
 import TradingBots from './pages/TradingBots';
 import MarketData from './pages/MarketData';
 import Security from './pages/Security';
+import TradingSimulation from './pages/TradingSimulation';
+import AmazonMonitor from './pages/AmazonMonitor';
+import SettingsPage from './pages/SettingsPage';
 import { SessionManager } from './lib/session';
 import { supabase } from './lib/supabase';
 
@@ -81,12 +84,15 @@ export default function App() {
   }
 
   const pages: Record<Page, React.ReactNode> = {
-    dashboard: <Dashboard onNav={setPage} />,
-    heartbeat: <HeartbeatMonitor />,
-    telegram:  <TelegramBot />,
-    trading:   <TradingBots />,
-    market:    <MarketData />,
-    security:  <Security />,
+    dashboard:  <Dashboard onNav={setPage} />,
+    heartbeat:  <HeartbeatMonitor />,
+    telegram:   <TelegramBot />,
+    trading:    <TradingBots />,
+    market:     <MarketData />,
+    security:   <Security />,
+    simulation: <TradingSimulation />,
+    amazon:     <AmazonMonitor />,
+    settings:   <SettingsPage />,
   };
 
   return (

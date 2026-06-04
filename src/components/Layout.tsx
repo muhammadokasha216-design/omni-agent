@@ -2,19 +2,23 @@ import { useState, useEffect } from 'react';
 import {
   LayoutDashboard, Activity, Send, TrendingUp, BarChart2,
   ShieldCheck, Menu, X, Zap, Bell, Circle,
+  FlaskConical, ShoppingCart, Settings,
 } from 'lucide-react';
 import type { SystemAlert } from '../lib/types';
 import { supabase } from '../lib/supabase';
 
-export type Page = 'dashboard' | 'heartbeat' | 'telegram' | 'trading' | 'market' | 'security';
+export type Page = 'dashboard' | 'heartbeat' | 'telegram' | 'trading' | 'market' | 'security' | 'simulation' | 'amazon' | 'settings';
 
-const NAV: { id: Page; label: string; icon: React.FC<any>; color: string }[] = [
+const NAV: { id: Page; label: string; icon: React.FC<any>; color: string; group?: string }[] = [
   { id: 'dashboard',  label: 'Command Center', icon: LayoutDashboard, color: 'text-ares-amber' },
   { id: 'heartbeat',  label: 'Heartbeat',       icon: Activity,       color: 'text-ares-green' },
   { id: 'telegram',   label: 'Telegram Bot',    icon: Send,           color: 'text-ares-cyan'  },
   { id: 'trading',    label: 'Trading Bots',    icon: TrendingUp,     color: 'text-ares-green' },
   { id: 'market',     label: 'Market Data',     icon: BarChart2,      color: 'text-ares-amber' },
   { id: 'security',   label: 'Security',        icon: ShieldCheck,    color: 'text-ares-red'   },
+  { id: 'simulation', label: 'Trade Sim',       icon: FlaskConical,   color: 'text-ares-amber', group: 'AUTO-PILOT' },
+  { id: 'amazon',     label: 'Amazon Monitor',  icon: ShoppingCart,   color: 'text-ares-cyan',  group: 'AUTO-PILOT' },
+  { id: 'settings',   label: 'Settings',        icon: Settings,       color: 'text-ares-textSub', group: 'CONFIG' },
 ];
 
 interface SidebarProps {
@@ -46,33 +50,41 @@ function Sidebar({ page, onNav, unreadAlerts }: SidebarProps) {
 
       {/* Nav */}
       <nav className="relative z-10 flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-        {NAV.map(item => {
+        {NAV.map((item, idx) => {
           const Icon = item.icon;
           const active = page === item.id;
+          const prevItem = NAV[idx - 1];
+          const showGroupLabel = item.group && item.group !== prevItem?.group;
           return (
-            <button
-              key={item.id}
-              onClick={() => onNav(item.id)}
-              className={`relative w-full flex items-center gap-2.5 px-3 py-2 rounded text-left transition-all duration-150
-                ${active
-                  ? 'bg-ares-elevated border border-ares-borderLit'
-                  : 'border border-transparent hover:bg-ares-elevated/50 hover:border-ares-border'
-                }`}
-            >
-              {active && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-ares-amber rounded-r"
-                  style={{ boxShadow: '0 0 8px rgba(245,158,11,0.8)' }} />
+            <div key={item.id}>
+              {showGroupLabel && (
+                <div className="px-3 pt-3 pb-1 text-[8px] font-mono tracking-widest text-ares-textMuted uppercase">
+                  {item.group}
+                </div>
               )}
-              <Icon size={14} className={active ? item.color : 'text-ares-textSub'} />
-              <span className={`text-[11px] font-mono font-medium tracking-wide ${active ? 'text-ares-text' : 'text-ares-textSub'}`}>
-                {item.label}
-              </span>
-              {item.id === 'security' && unreadAlerts > 0 && (
-                <span className="ml-auto text-[9px] font-mono font-bold bg-ares-red text-white rounded px-1.5 py-0.5 min-w-[18px] text-center">
-                  {unreadAlerts}
+              <button
+                onClick={() => onNav(item.id)}
+                className={`relative w-full flex items-center gap-2.5 px-3 py-2 rounded text-left transition-all duration-150
+                  ${active
+                    ? 'bg-ares-elevated border border-ares-borderLit'
+                    : 'border border-transparent hover:bg-ares-elevated/50 hover:border-ares-border'
+                  }`}
+              >
+                {active && (
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-ares-amber rounded-r"
+                    style={{ boxShadow: '0 0 8px rgba(245,158,11,0.8)' }} />
+                )}
+                <Icon size={14} className={active ? item.color : 'text-ares-textSub'} />
+                <span className={`text-[11px] font-mono font-medium tracking-wide ${active ? 'text-ares-text' : 'text-ares-textSub'}`}>
+                  {item.label}
                 </span>
-              )}
-            </button>
+                {item.id === 'security' && unreadAlerts > 0 && (
+                  <span className="ml-auto text-[9px] font-mono font-bold bg-ares-red text-white rounded px-1.5 py-0.5 min-w-[18px] text-center">
+                    {unreadAlerts}
+                  </span>
+                )}
+              </button>
+            </div>
           );
         })}
       </nav>
