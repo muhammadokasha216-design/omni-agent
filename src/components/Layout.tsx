@@ -1,0 +1,218 @@
+import { useState, useEffect } from 'react';
+import {
+  LayoutDashboard, Activity, Send, TrendingUp, BarChart2,
+  ShieldCheck, Menu, X, Zap, Bell, Circle,
+} from 'lucide-react';
+import type { SystemAlert } from '../lib/types';
+import { supabase } from '../lib/supabase';
+
+export type Page = 'dashboard' | 'heartbeat' | 'telegram' | 'trading' | 'market' | 'security';
+
+const NAV: { id: Page; label: string; icon: React.FC<any>; color: string }[] = [
+  { id: 'dashboard',  label: 'Command Center', icon: LayoutDashboard, color: 'text-ares-amber' },
+  { id: 'heartbeat',  label: 'Heartbeat',       icon: Activity,       color: 'text-ares-green' },
+  { id: 'telegram',   label: 'Telegram Bot',    icon: Send,           color: 'text-ares-cyan'  },
+  { id: 'trading',    label: 'Trading Bots',    icon: TrendingUp,     color: 'text-ares-green' },
+  { id: 'market',     label: 'Market Data',     icon: BarChart2,      color: 'text-ares-amber' },
+  { id: 'security',   label: 'Security',        icon: ShieldCheck,    color: 'text-ares-red'   },
+];
+
+interface SidebarProps {
+  page: Page;
+  onNav: (p: Page) => void;
+  unreadAlerts: number;
+}
+
+function Sidebar({ page, onNav, unreadAlerts }: SidebarProps) {
+  const now = new Date();
+  return (
+    <aside className="w-56 flex-shrink-0 flex flex-col bg-ares-surface border-r border-ares-border relative overflow-hidden">
+      {/* Grid overlay */}
+      <div className="grid-overlay opacity-30" />
+
+      {/* Logo */}
+      <div className="relative z-10 flex items-center gap-3 px-5 py-4 border-b border-ares-border">
+        <div className="relative flex-shrink-0">
+          <div className="w-9 h-9 rounded bg-ares-elevated border border-ares-borderLit flex items-center justify-center">
+            <Zap size={18} className="text-ares-amber" style={{ filter: 'drop-shadow(0 0 6px rgba(245,158,11,0.8))' }} />
+          </div>
+          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-ares-green pulse-online" />
+        </div>
+        <div>
+          <div className="text-sm font-bold font-mono tracking-widest text-ares-amber glow-amber">ARES</div>
+          <div className="text-[9px] font-mono text-ares-textMuted tracking-wider">OMNI-AGENT v3.0</div>
+        </div>
+      </div>
+
+      {/* Nav */}
+      <nav className="relative z-10 flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
+        {NAV.map(item => {
+          const Icon = item.icon;
+          const active = page === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => onNav(item.id)}
+              className={`relative w-full flex items-center gap-2.5 px-3 py-2 rounded text-left transition-all duration-150
+                ${active
+                  ? 'bg-ares-elevated border border-ares-borderLit'
+                  : 'border border-transparent hover:bg-ares-elevated/50 hover:border-ares-border'
+                }`}
+            >
+              {active && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-ares-amber rounded-r"
+                  style={{ boxShadow: '0 0 8px rgba(245,158,11,0.8)' }} />
+              )}
+              <Icon size={14} className={active ? item.color : 'text-ares-textSub'} />
+              <span className={`text-[11px] font-mono font-medium tracking-wide ${active ? 'text-ares-text' : 'text-ares-textSub'}`}>
+                {item.label}
+              </span>
+              {item.id === 'security' && unreadAlerts > 0 && (
+                <span className="ml-auto text-[9px] font-mono font-bold bg-ares-red text-white rounded px-1.5 py-0.5 min-w-[18px] text-center">
+                  {unreadAlerts}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Clock */}
+      <div className="relative z-10 px-4 py-3 border-t border-ares-border">
+        <div className="text-xs font-mono text-ares-textSub tabular-nums">
+          {now.toLocaleTimeString('en-US', { hour12: false })}
+          <span className="text-ares-textMuted ml-2 text-[10px]">UTC{now.getTimezoneOffset() <= 0 ? '+' : ''}{-now.getTimezoneOffset() / 60}</span>
+        </div>
+        <div className="text-[10px] font-mono text-ares-textMuted mt-0.5">
+          {now.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })}
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+interface LayoutProps {
+  page: Page;
+  onNav: (p: Page) => void;
+  children: React.ReactNode;
+  unreadAlerts: number;
+}
+
+export default function Layout({ page, onNav, children, unreadAlerts }: LayoutProps) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [clock, setClock] = useState(new Date());
+
+  useEffect(() => {
+    const t = setInterval(() => setClock(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const currentNav = NAV.find(n => n.id === page)!;
+
+  return (
+    <div className="flex h-screen bg-ares-bg overflow-hidden">
+      {/* Desktop sidebar */}
+      <div className="hidden lg:flex">
+        <Sidebar page={page} onNav={onNav} unreadAlerts={unreadAlerts} />
+      </div>
+
+      {/* Mobile sidebar */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 flex lg:hidden">
+          <div className="flex-shrink-0">
+            <Sidebar page={page} onNav={p => { onNav(p); setMobileOpen(false); }} unreadAlerts={unreadAlerts} />
+          </div>
+          <div className="flex-1 bg-black/60 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
+        </div>
+      )}
+
+      {/* Main content */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Topbar */}
+        <header className="flex items-center justify-between px-4 py-2.5 border-b border-ares-border bg-ares-surface/80 backdrop-blur-sm flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <button className="lg:hidden p-1.5 rounded hover:bg-ares-elevated text-ares-textSub" onClick={() => setMobileOpen(true)}>
+              <Menu size={18} />
+            </button>
+            {/* Breadcrumb */}
+            <div className="flex items-center gap-1.5 text-[11px] font-mono">
+              <span className="text-ares-textMuted">ARES</span>
+              <span className="text-ares-textMuted">/</span>
+              <span className="text-ares-text font-semibold tracking-wide uppercase">{currentNav.label}</span>
+            </div>
+          </div>
+
+          {/* Right side: status + time */}
+          <div className="flex items-center gap-4 text-[10px] font-mono text-ares-textSub">
+            <div className="hidden sm:flex items-center gap-1.5">
+              <Circle size={6} className="text-ares-green fill-ares-green animate-pulse" />
+              <span className="tracking-wider">SYS NOMINAL</span>
+            </div>
+            {unreadAlerts > 0 && (
+              <button onClick={() => onNav('security')} className="flex items-center gap-1 text-ares-red">
+                <Bell size={12} />
+                <span>{unreadAlerts}</span>
+              </button>
+            )}
+            <span className="tabular-nums text-ares-textSub hidden sm:block">
+              {clock.toLocaleTimeString('en-US', { hour12: false })}
+            </span>
+          </div>
+        </header>
+
+        {/* Ticker tape */}
+        <TickerTape />
+
+        {/* Page content */}
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-5">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+// Live ticker strip
+const TICKERS = [
+  { symbol: 'BTC/USDT', price: 67842.50, change: +2.34 },
+  { symbol: 'ETH/USDT', price: 3847.20,  change: -1.12 },
+  { symbol: 'BNB/USDT', price: 567.80,   change: +0.88 },
+  { symbol: 'SOL/USDT', price: 172.40,   change: +3.21 },
+  { symbol: 'XRP/USDT', price: 0.5823,   change: -0.43 },
+  { symbol: 'ADA/USDT', price: 0.4471,   change: +1.05 },
+  { symbol: 'DOGE/USDT',price: 0.1634,   change: +4.72 },
+  { symbol: 'MATIC/USDT',price: 0.8921,  change: -2.18 },
+];
+
+function TickerTape() {
+  const [prices, setPrices] = useState(TICKERS);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setPrices(prev => prev.map(p => ({
+        ...p,
+        price: p.price * (1 + (Math.random() - 0.5) * 0.001),
+        change: p.change + (Math.random() - 0.5) * 0.1,
+      })));
+    }, 3000);
+    return () => clearInterval(t);
+  }, []);
+
+  const items = [...prices, ...prices]; // duplicate for seamless loop
+
+  return (
+    <div className="ticker-wrap bg-ares-surface/60 border-b border-ares-border flex-shrink-0">
+      <div className="ticker-inner py-1">
+        {items.map((t, i) => (
+          <span key={i} className="inline-flex items-center gap-2 text-[10px] font-mono mx-6">
+            <span className="text-ares-textSub font-bold">{t.symbol}</span>
+            <span className="text-ares-text tabular-nums">${t.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</span>
+            <span className={t.change >= 0 ? 'text-ares-green' : 'text-ares-red'}>
+              {t.change >= 0 ? '▲' : '▼'} {Math.abs(t.change).toFixed(2)}%
+            </span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}

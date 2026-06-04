@@ -1,89 +1,105 @@
-export type DeviceType = 'pc' | 'mobile' | 'trading';
-export type CommandStatus = 'pending' | 'dispatched' | 'success' | 'error';
-export type TradeAction = 'buy' | 'sell' | 'close' | 'alert';
+// All domain types for Ares Omni-Agent Dashboard
 
-export interface Device {
+export type NodeType = 'pc' | 'mobile' | 'server' | 'trading';
+export type NodeStatus = 'online' | 'offline' | 'degraded';
+export type AlertSeverity = 'info' | 'warning' | 'critical';
+export type TradeSide = 'buy' | 'sell';
+export type TradeStatus = 'pending' | 'filled' | 'cancelled' | 'error';
+export type BotStatus = 'active' | 'inactive';
+export type TelegramDirection = 'inbound' | 'outbound';
+export type MsgStatus = 'pending' | 'processed' | 'failed';
+
+export interface AgentNode {
   id: string;
   name: string;
-  type: DeviceType;
+  type: NodeType;
   endpoint_url: string;
   api_key: string;
-  is_active: boolean;
-  last_ping: string | null;
+  is_online: boolean;
+  last_heartbeat: string | null;
+  heartbeat_interval_sec: number;
   meta: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
 
-export interface CotStep {
-  step: 'parse' | 'target' | 'generate' | 'dispatch' | 'verify';
-  label: string;
-  detail: string;
-  status: 'pending' | 'running' | 'done' | 'error';
-  timestamp: string;
+export interface HeartbeatEntry {
+  id: string;
+  node_id: string;
+  status: NodeStatus;
+  latency_ms: number;
+  recorded_at: string;
 }
 
-export interface CommandRecord {
+export interface TelegramMessage {
   id: string;
-  raw_input: string;
-  parsed_intent: string;
-  target_device: string | null;
-  payload: Record<string, unknown>;
-  status: CommandStatus;
-  response: string;
-  latency_ms: number;
-  cot_steps: CotStep[];
+  direction: TelegramDirection;
+  chat_id: string;
+  message_text: string;
+  command: string | null;
+  status: MsgStatus;
+  processed_at: string | null;
   created_at: string;
 }
 
-export interface TradingHook {
+export interface TradingBot {
   id: string;
-  label: string;
+  name: string;
   exchange: string;
   symbol: string;
-  action: TradeAction;
-  quantity: string;
-  api_endpoint: string;
-  api_key: string;
+  strategy: string;
   is_active: boolean;
-  last_executed: string | null;
+  last_run: string | null;
+  pnl_usd: number;
+  config: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
 
-export interface WebhookLog {
+export interface TradeExecution {
   id: string;
-  command_id: string | null;
-  device_id: string | null;
-  payload: Record<string, unknown>;
-  http_status: number;
-  response_body: string;
-  latency_ms: number;
-  created_at: string;
+  bot_id: string | null;
+  side: TradeSide;
+  symbol: string;
+  quantity: number;
+  price: number;
+  status: TradeStatus;
+  pnl_usd: number | null;
+  exchange_order_id: string | null;
+  executed_at: string;
 }
 
-export interface TickerData {
+export interface MarketSnapshot {
+  id: string;
+  symbol: string;
+  price: number;
+  volume_24h: number;
+  change_24h_pct: number;
+  bid: number;
+  ask: number;
+  recorded_at: string;
+}
+
+export interface SystemAlert {
+  id: string;
+  severity: AlertSeverity;
+  source: string;
+  title: string;
+  body: string;
+  is_read: boolean;
+  triggered_at: string;
+}
+
+// Chart point for price/volume charts
+export interface ChartPoint {
+  t: string;
+  price: number;
+  volume: number;
+}
+
+// Ticker data for the live ticker strip
+export interface TickerItem {
   symbol: string;
   price: number;
   change: number;
-  changePct: number;
-  volume: string;
-  high: number;
-  low: number;
-}
-
-export interface ProcessCommandRequest {
-  input: string;
-  devices: Device[];
-  trading_hooks: TradingHook[];
-}
-
-export interface ProcessCommandResponse {
-  intent: string;
-  target: 'pc' | 'mobile' | 'trading' | 'system' | 'unknown';
-  target_device_id: string | null;
-  payload: Record<string, unknown>;
-  cot_steps: CotStep[];
-  reply: string;
-  should_dispatch: boolean;
 }
