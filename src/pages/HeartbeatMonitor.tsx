@@ -1,12 +1,14 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Activity, Plus, RefreshCw, Wifi, WifiOff, Clock, Trash2, Edit2, Check, X, Radio } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/auth';
 import { Panel, PanelHeader, StatusDot, Empty } from '../components/ui';
 import type { AgentNode, HeartbeatEntry } from '../lib/types';
 import { useAgent } from '../lib/agent';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
 
 export default function HeartbeatMonitor() {
+  const { user } = useAuth();
   const [nodes, setNodes] = useState<AgentNode[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [history, setHistory] = useState<HeartbeatEntry[]>([]);
@@ -41,7 +43,7 @@ export default function HeartbeatMonitor() {
   }, [selected]);
 
   async function loadNodes() {
-    const { data } = await supabase.from('agent_nodes').select('*').order('created_at');
+    const { data } = await supabase.from('agent_nodes').select('*').eq('user_id', user?.id ?? '').order('created_at');
     if (data) {
       setNodes(data);
       if (!selected && data.length > 0) setSelected(data[0].id);
@@ -52,6 +54,7 @@ export default function HeartbeatMonitor() {
     const { data } = await supabase
       .from('heartbeat_log')
       .select('*')
+      .eq('user_id', user?.id ?? '')
       .eq('node_id', nodeId)
       .order('recorded_at', { ascending: false })
       .limit(40);
@@ -76,6 +79,7 @@ export default function HeartbeatMonitor() {
       }).eq('id', node.id);
 
       await supabase.from('heartbeat_log').insert({
+        user_id: user?.id ?? '',
         node_id: node.id,
         status: online ? 'online' : 'offline',
         latency_ms: latency,
@@ -89,19 +93,19 @@ export default function HeartbeatMonitor() {
   }
 
   async function simulateHeartbeats() {
-    const { data: nds } = await supabase.from('agent_nodes').select('id,is_online');
+    const { data: nds } = await supabase.from('agent_nodes').select('id,is_online').eq('user_id', user?.id ?? '');
     if (!nds) return;
     for (const n of nds) {
       const online = Math.random() > 0.2;
       const latency = Math.floor(50 + Math.random() * 300);
       await supabase.from('agent_nodes').update({ is_online: online, last_heartbeat: new Date().toISOString() }).eq('id', n.id);
-      await supabase.from('heartbeat_log').insert({ node_id: n.id, status: online ? 'online' : 'offline', latency_ms: latency });
+      await supabase.from('heartbeat_log').insert({ user_id: user?.id ?? '', node_id: n.id, status: online ? 'online' : 'offline', latency_ms: latency });
     }
   }
 
   async function addNode() {
     if (!form.name.trim()) return;
-    await supabase.from('agent_nodes').insert({ ...form, meta: {} });
+    await supabase.from('agent_nodes').insert({ user_id: user?.id ?? '', ...form, meta: {} });
     setAddOpen(false);
     setForm({ name: '', type: 'pc', endpoint_url: '', heartbeat_interval_sec: 30 });
     loadNodes();

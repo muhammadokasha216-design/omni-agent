@@ -3,12 +3,14 @@ import {
   LayoutDashboard, Activity, Send, TrendingUp, BarChart2,
   ShieldCheck, Menu, X, Zap, Bell, Circle,
   FlaskConical, ShoppingCart, Settings, Radio, WifiOff,
+  Crown, LogOut, User,
 } from 'lucide-react';
 import { useAgent } from '../lib/agent';
+import { useAuth } from '../lib/auth';
 
-export type Page = 'dashboard' | 'heartbeat' | 'telegram' | 'trading' | 'market' | 'security' | 'simulation' | 'amazon' | 'settings';
+export type Page = 'dashboard' | 'heartbeat' | 'telegram' | 'trading' | 'market' | 'security' | 'simulation' | 'amazon' | 'settings' | 'admin';
 
-const NAV: { id: Page; label: string; icon: React.FC<any>; color: string; group?: string }[] = [
+const NAV_ALL: { id: Page; label: string; icon: React.FC<any>; color: string; group?: string; adminOnly?: boolean }[] = [
   { id: 'dashboard',  label: 'Command Center', icon: LayoutDashboard, color: 'text-ares-amber' },
   { id: 'heartbeat',  label: 'Heartbeat',       icon: Activity,       color: 'text-ares-green' },
   { id: 'telegram',   label: 'Telegram Bot',    icon: Send,           color: 'text-ares-cyan'  },
@@ -17,6 +19,7 @@ const NAV: { id: Page; label: string; icon: React.FC<any>; color: string; group?
   { id: 'security',   label: 'Security',        icon: ShieldCheck,    color: 'text-ares-red'   },
   { id: 'simulation', label: 'Trade Sim',       icon: FlaskConical,   color: 'text-ares-amber', group: 'AUTO-PILOT' },
   { id: 'amazon',     label: 'Amazon Monitor',  icon: ShoppingCart,   color: 'text-ares-cyan',  group: 'AUTO-PILOT' },
+  { id: 'admin',      label: 'Owner Dashboard', icon: Crown,          color: 'text-ares-amber', group: 'ADMIN', adminOnly: true },
   { id: 'settings',   label: 'Settings',        icon: Settings,       color: 'text-ares-textSub', group: 'CONFIG' },
 ];
 
@@ -28,7 +31,13 @@ interface SidebarProps {
 
 function Sidebar({ page, onNav, unreadAlerts }: SidebarProps) {
   const { mode, dbConnected } = useAgent();
+  const { profile, signOut } = useAuth();
+  const isAdmin = profile?.role === 'super_admin' || profile?.role === 'admin';
   const isLive = mode === 'live' && dbConnected;
+
+  // Filter nav items: admin-only items hidden for non-admins
+  const NAV = NAV_ALL.filter(item => !item.adminOnly || isAdmin);
+
   const now = new Date();
   return (
     <aside className="w-56 flex-shrink-0 flex flex-col bg-ares-surface border-r border-ares-border relative overflow-hidden">
@@ -90,14 +99,28 @@ function Sidebar({ page, onNav, unreadAlerts }: SidebarProps) {
         })}
       </nav>
 
-      {/* Clock */}
-      <div className="relative z-10 px-4 py-3 border-t border-ares-border">
-        <div className="text-xs font-mono text-ares-textSub tabular-nums">
-          {now.toLocaleTimeString('en-US', { hour12: false })}
-          <span className="text-ares-textMuted ml-2 text-[10px]">UTC{now.getTimezoneOffset() <= 0 ? '+' : ''}{-now.getTimezoneOffset() / 60}</span>
+      {/* User info + sign out */}
+      <div className="relative z-10 border-t border-ares-border">
+        <div className="px-4 py-2.5 flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-full bg-ares-elevated border border-ares-border flex items-center justify-center">
+            <User size={12} className="text-ares-textSub" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] font-mono font-semibold text-ares-text truncate">{profile?.display_name ?? 'User'}</div>
+            <div className="text-[8px] font-mono text-ares-textMuted truncate">{profile?.email}</div>
+          </div>
+          <button onClick={signOut} className="p-1 text-ares-textMuted hover:text-ares-red transition-colors" title="Sign Out">
+            <LogOut size={12} />
+          </button>
         </div>
-        <div className="text-[10px] font-mono text-ares-textMuted mt-0.5">
-          {now.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })}
+        <div className="px-4 py-2 border-t border-ares-border">
+          <div className="text-xs font-mono text-ares-textSub tabular-nums">
+            {now.toLocaleTimeString('en-US', { hour12: false })}
+            <span className="text-ares-textMuted ml-2 text-[10px]">UTC{now.getTimezoneOffset() <= 0 ? '+' : ''}{-now.getTimezoneOffset() / 60}</span>
+          </div>
+          <div className="text-[10px] font-mono text-ares-textMuted mt-0.5">
+            {now.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })}
+          </div>
         </div>
       </div>
     </aside>
@@ -133,7 +156,7 @@ export default function Layout({ page, onNav, children, unreadAlerts }: LayoutPr
     ? 'CONNECTING...'
     : 'SIMULATED';
 
-  const currentNav = NAV.find(n => n.id === page)!;
+  const currentNav = NAV_ALL.find(n => n.id === page);
 
   return (
     <div className="flex h-screen bg-ares-bg overflow-hidden">
@@ -164,7 +187,7 @@ export default function Layout({ page, onNav, children, unreadAlerts }: LayoutPr
             <div className="flex items-center gap-1.5 text-[11px] font-mono">
               <span className="text-ares-textMuted">ARES</span>
               <span className="text-ares-textMuted">/</span>
-              <span className="text-ares-text font-semibold tracking-wide uppercase">{currentNav.label}</span>
+              <span className="text-ares-text font-semibold tracking-wide uppercase">{currentNav?.label ?? 'Dashboard'}</span>
             </div>
           </div>
 
@@ -237,7 +260,7 @@ function TickerTape() {
     return () => clearInterval(t);
   }, []);
 
-  const items = [...prices, ...prices]; // duplicate for seamless loop
+  const items = [...prices, ...prices];
 
   return (
     <div className="ticker-wrap bg-ares-surface/60 border-b border-ares-border flex-shrink-0">

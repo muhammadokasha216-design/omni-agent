@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ShieldCheck, ShieldAlert, Eye, EyeOff, Bell, BellOff, Check, Trash2, RefreshCw, AlertTriangle, Info, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/auth';
 import { PanelHeader, Badge, Empty } from '../components/ui';
 import type { SystemAlert } from '../lib/types';
 
@@ -16,6 +17,7 @@ const ENV_KEYS: Omit<ApiKey, 'value' | 'masked'>[] = [
 ];
 
 export default function Security() {
+  const { user } = useAuth();
   const [alerts, setAlerts] = useState<SystemAlert[]>([]);
   const [keys, setKeys] = useState<ApiKey[]>(() =>
     ENV_KEYS.map(k => ({
@@ -40,6 +42,7 @@ export default function Security() {
     const { data } = await supabase
       .from('system_alerts')
       .select('*')
+      .eq('user_id', user?.id ?? '')
       .order('triggered_at', { ascending: false });
     if (data) setAlerts(data);
     setLoading(false);

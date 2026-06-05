@@ -4,6 +4,7 @@ import {
   ExternalLink, TrendingDown, TrendingUp, Check, X, Package,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/auth';
 import { PanelHeader, StatusDot, Badge, Empty, StatCard } from '../components/ui';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
 
@@ -44,6 +45,7 @@ function PriceHistoryChart({ history, targetPrice }: { history: { date: string; 
 }
 
 export default function AmazonMonitor() {
+  const { user } = useAuth();
   const [products, setProducts] = useState<AmazonProduct[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -75,7 +77,7 @@ export default function AmazonMonitor() {
   }, []);
 
   async function load() {
-    const { data } = await supabase.from('amazon_monitors').select('*').order('created_at');
+    const { data } = await supabase.from('amazon_monitors').select('*').eq('user_id', user?.id ?? '').order('created_at');
     if (data) {
       setProducts(data);
       if (!selected && data.length > 0) setSelected(data[0].id);
@@ -83,7 +85,7 @@ export default function AmazonMonitor() {
   }
 
   async function simulateRefreshAll() {
-    const { data: prods } = await supabase.from('amazon_monitors').select('id, current_price, target_price, price_history, availability');
+    const { data: prods } = await supabase.from('amazon_monitors').select('id, current_price, target_price, price_history, availability').eq('user_id', user?.id ?? '');
     if (!prods) return;
     for (const p of prods) {
       const fluctuation = 1 + (Math.random() - 0.5) * 0.02;
@@ -143,6 +145,7 @@ export default function AmazonMonitor() {
     const today = new Date().toISOString().split('T')[0];
     const price = parseFloat(form.current_price);
     await supabase.from('amazon_monitors').insert({
+      user_id: user?.id ?? '',
       asin: form.asin || 'CUSTOM',
       title: form.title,
       url: form.url,

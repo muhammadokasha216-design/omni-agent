@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { TrendingUp, Plus, Play, Square, RefreshCw, X, Check, Trash2, BarChart2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/auth';
 import { PanelHeader, StatusDot, Badge, Empty } from '../components/ui';
 import type { TradingBot, TradeExecution } from '../lib/types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts';
 
 export default function TradingBots() {
+  const { user } = useAuth();
   const [bots, setBots] = useState<TradingBot[]>([]);
   const [trades, setTrades] = useState<TradeExecution[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -30,8 +32,8 @@ export default function TradingBots() {
 
   async function load() {
     const [b, t] = await Promise.all([
-      supabase.from('trading_bots').select('*').order('created_at'),
-      supabase.from('trade_executions').select('*').order('executed_at', { ascending: false }).limit(20),
+      supabase.from('trading_bots').select('*').eq('user_id', user?.id ?? '').order('created_at'),
+      supabase.from('trade_executions').select('*').eq('user_id', user?.id ?? '').order('executed_at', { ascending: false }).limit(20),
     ]);
     if (b.data) { setBots(b.data); if (!selected && b.data.length > 0) setSelected(b.data[0].id); }
     if (t.data) setTrades(t.data);
@@ -41,6 +43,7 @@ export default function TradingBots() {
     const { data } = await supabase
       .from('trade_executions')
       .select('*')
+      .eq('user_id', user?.id ?? '')
       .eq('bot_id', botId)
       .order('executed_at', { ascending: false })
       .limit(30);
@@ -61,6 +64,7 @@ export default function TradingBots() {
         const qty = parseFloat((Math.random() * 0.1 + 0.01).toFixed(4));
         const pnl = parseFloat((Math.random() * 30 - 10).toFixed(2));
         await supabase.from('trade_executions').insert({
+          user_id: user?.id ?? '',
           bot_id: bot.id, side, symbol: bot.symbol, quantity: qty, price,
           status: 'filled', pnl_usd: pnl,
         });
@@ -80,7 +84,7 @@ export default function TradingBots() {
 
   async function addBot() {
     if (!form.name.trim()) return;
-    await supabase.from('trading_bots').insert({ ...form, pnl_usd: 0, config: {} });
+    await supabase.from('trading_bots').insert({ user_id: user?.id ?? '', ...form, pnl_usd: 0, config: {} });
     setAddOpen(false);
     setForm({ name: '', exchange: 'binance', symbol: 'BTC/USDT', strategy: 'scalp' });
     load();

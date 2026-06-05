@@ -4,6 +4,7 @@ import {
   BarChart2, Zap, Target, DollarSign, Activity,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/auth';
 import { StatCard, PanelHeader, StatusDot, Empty } from '../components/ui';
 import {
   AreaChart, Area, LineChart, Line, BarChart, Bar,
@@ -55,6 +56,7 @@ const PAIR_COLORS: Record<string, string> = {
 };
 
 export default function TradingSimulation() {
+  const { user } = useAuth();
   const [trades, setTrades] = useState<SimTrade[]>([]);
   const [selectedSym, setSelectedSym] = useState('BTC/USDT');
   const [priceFeed, setPriceFeed] = useState<Record<string, { t: string; price: number }[]>>(() =>
@@ -101,7 +103,7 @@ export default function TradingSimulation() {
   }, [autoTrade]);
 
   async function loadTrades() {
-    const { data } = await supabase.from('sim_trades').select('*').order('opened_at', { ascending: false }).limit(50);
+    const { data } = await supabase.from('sim_trades').select('*').eq('user_id', user?.id ?? '').order('opened_at', { ascending: false }).limit(50);
     if (data) setTrades(data);
   }
 
@@ -113,6 +115,7 @@ export default function TradingSimulation() {
 
     try {
       await supabase.from('sim_trades').insert({
+        user_id: user?.id ?? '',
         symbol: sym,
         side: form.side,
         quantity: qty,
@@ -151,7 +154,7 @@ export default function TradingSimulation() {
     const price = priceFeed[sym]?.at(-1)?.price ?? BASE[sym];
     const strategy = STRATEGIES[Math.floor(Math.random() * STRATEGIES.length)];
 
-    await supabase.from('sim_trades').insert({ symbol: sym, side, quantity: qty, entry_price: price, status: 'open', strategy });
+    await supabase.from('sim_trades').insert({ user_id: user?.id ?? '', symbol: sym, side, quantity: qty, entry_price: price, status: 'open', strategy });
     setTimeout(() => closeTrade(sym, price, qty, side), 2000 + Math.random() * 6000);
   }
 

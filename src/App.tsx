@@ -10,43 +10,33 @@ import Security from './pages/Security';
 import TradingSimulation from './pages/TradingSimulation';
 import AmazonMonitor from './pages/AmazonMonitor';
 import SettingsPage from './pages/SettingsPage';
-import { SessionManager } from './lib/session';
+import AdminDashboard from './pages/AdminDashboard';
+import AuthPage from './pages/AuthPage';
 import { supabase } from './lib/supabase';
+import { AuthProvider, useAuth } from './lib/auth';
 import { SettingsProvider } from './lib/settings';
 import { AgentProvider } from './lib/agent';
 
-export default function App() {
-  const [page, setPage]           = useState<Page>('dashboard');
-  const [booting, setBooting]     = useState(true);
-  const [bootError, setBootError] = useState<string | null>(null);
+function AppInner() {
+  const { user, profile, loading: authLoading, isActive, isPending } = useAuth();
+  const [page, setPage] = useState<Page>('dashboard');
   const [unreadAlerts, setUnreadAlerts] = useState(0);
 
-  useEffect(() => { boot(); }, []);
-
-  async function boot() {
-    try {
-      await SessionManager.initialize();
-      await loadAlertCount();
-      // Subscribe to new alerts
-      supabase.channel('alert_count')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'system_alerts' }, loadAlertCount)
-        .subscribe();
-      setBooting(false);
-    } catch (err) {
-      setBootError(err instanceof Error ? err.message : 'Unknown error');
-      setBooting(false);
-    }
-  }
+  useEffect(() => {
+    if (user && isActive) loadAlertCount();
+  }, [user, isActive]);
 
   async function loadAlertCount() {
     const { count } = await supabase
       .from('system_alerts')
       .select('*', { count: 'exact', head: true })
-      .eq('is_read', false);
+      .eq('is_read', false)
+      .eq('user_id', user?.id ?? '');
     setUnreadAlerts(count ?? 0);
   }
 
-  if (booting) {
+  // Auth loading screen
+  if (authLoading) {
     return (
       <div className="min-h-screen bg-ares-bg flex items-center justify-center">
         <div className="text-center space-y-4">
@@ -58,52 +48,67 @@ export default function App() {
           </div>
           <div>
             <div className="text-sm font-mono font-bold tracking-widest text-ares-amber glow-amber">ARES</div>
-            <div className="text-[10px] font-mono text-ares-textMuted mt-1 tracking-wider">OMNI-AGENT v3.0 — INITIALIZING</div>
-          </div>
-          <div className="flex justify-center gap-1 mt-2">
-            {[0, 1, 2, 3, 4].map(i => (
-              <div key={i} className="w-1 h-1 rounded-full bg-ares-amber animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />
-            ))}
+            <div className="text-[10px] font-mono text-ares-textMuted mt-1 tracking-wider">OMNI-AGENT v3.0 — LOADING</div>
           </div>
         </div>
       </div>
     );
   }
 
-  if (bootError) {
+  // Not authenticated → show login/signup
+  if (!user) {
+    return <AuthPage />;
+  }
+
+  // Authenticated but pending approval → show pending screen
+  if (isPending || profile?.account_status === 'rejected') {
+    return <AuthPage />;
+  }
+
+  // Authenticated and active → show dashboard
+  if (isActive) {
+    const pages: Record<Page, React.ReactNode> = {
+      dashboard:  <Dashboard onNav={setPage} />,
+      heartbeat:  <HeartbeatMonitor />,
+      telegram:   <TelegramBot />,
+      trading:    <TradingBots />,
+      market:     <MarketData />,
+      security:   <Security />,
+      simulation: <TradingSimulation />,
+      amazon:     <AmazonMonitor />,
+      settings:   <SettingsPage />,
+      admin:      <AdminDashboard />,
+    };
+
     return (
-      <div className="min-h-screen bg-ares-bg flex items-center justify-center p-4">
-        <div className="panel max-w-md w-full p-6 text-center space-y-4">
-          <Zap size={32} className="text-ares-red mx-auto" />
-          <div className="text-sm font-mono font-bold text-ares-red">INITIALIZATION FAILED</div>
-          <div className="text-[11px] font-mono text-ares-textMuted">{bootError}</div>
-          <button onClick={() => { setBootError(null); setBooting(true); boot(); }} className="btn btn-amber mx-auto">
-            RETRY
-          </button>
-        </div>
-      </div>
+      <SettingsProvider>
+        <AgentProvider>
+          <Layout page={page} onNav={setPage} unreadAlerts={unreadAlerts}>
+            {pages[page]}
+          </Layout>
+        </AgentProvider>
+      </SettingsProvider>
     );
   }
 
-  const pages: Record<Page, React.ReactNode> = {
-    dashboard:  <Dashboard onNav={setPage} />,
-    heartbeat:  <HeartbeatMonitor />,
-    telegram:   <TelegramBot />,
-    trading:    <TradingBots />,
-    market:     <MarketData />,
-    security:   <Security />,
-    simulation: <TradingSimulation />,
-    amazon:     <AmazonMonitor />,
-    settings:   <SettingsPage />,
-  };
-
+  // Fallback: account exists but status unclear (suspended, etc.)
   return (
-    <SettingsProvider>
-      <AgentProvider>
-        <Layout page={page} onNav={setPage} unreadAlerts={unreadAlerts}>
-          {pages[page]}
-        </Layout>
-      </AgentProvider>
-    </SettingsProvider>
+    <div className="min-h-screen bg-ares-bg flex items-center justify-center p-4">
+      <div className="panel max-w-md w-full p-6 text-center space-y-4">
+        <Zap size={32} className="text-ares-amber mx-auto" />
+        <div className="text-sm font-mono font-bold text-ares-amber">Account Status: {profile?.account_status?.toUpperCase() ?? 'UNKNOWN'}</div>
+        <div className="text-[11px] font-mono text-ares-textMuted">
+          Your account is currently {profile?.account_status ?? 'unavailable'}. Please contact the administrator.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppInner />
+    </AuthProvider>
   );
 }

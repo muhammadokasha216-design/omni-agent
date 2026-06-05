@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { LayoutDashboard, Activity, TrendingUp, ShieldAlert, Send, Cpu, RefreshCw, Radio, WifiOff, Zap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/auth';
 import { StatCard, PanelHeader } from '../components/ui';
 import type { AgentNode, TradingBot, SystemAlert, TelegramMessage } from '../lib/types';
 import type { Page } from '../components/Layout';
@@ -20,6 +21,7 @@ function genSparkline(base: number, len = 20) {
 interface Props { onNav: (p: Page) => void; }
 
 export default function Dashboard({ onNav }: Props) {
+  const { user } = useAuth();
   const [nodes, setNodes] = useState<AgentNode[]>([]);
   const [bots, setBots] = useState<TradingBot[]>([]);
   const [alerts, setAlerts] = useState<SystemAlert[]>([]);
@@ -38,10 +40,10 @@ export default function Dashboard({ onNav }: Props) {
   async function load() {
     setLoading(true);
     const [n, b, a, m] = await Promise.all([
-      supabase.from('agent_nodes').select('*').order('created_at'),
-      supabase.from('trading_bots').select('*').order('created_at'),
-      supabase.from('system_alerts').select('*').order('triggered_at', { ascending: false }).limit(5),
-      supabase.from('telegram_messages').select('*').order('created_at', { ascending: false }).limit(6),
+      supabase.from('agent_nodes').select('*').eq('user_id', user?.id ?? '').order('created_at'),
+      supabase.from('trading_bots').select('*').eq('user_id', user?.id ?? '').order('created_at'),
+      supabase.from('system_alerts').select('*').eq('user_id', user?.id ?? '').order('triggered_at', { ascending: false }).limit(5),
+      supabase.from('telegram_messages').select('*').eq('user_id', user?.id ?? '').order('created_at', { ascending: false }).limit(6),
     ]);
     if (n.data) setNodes(n.data);
     if (b.data) setBots(b.data);

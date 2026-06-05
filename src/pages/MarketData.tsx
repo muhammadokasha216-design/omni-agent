@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { BarChart2, RefreshCw, TrendingUp, TrendingDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/auth';
 import { PanelHeader, Empty } from '../components/ui';
 import {
   AreaChart, Area, LineChart, Line, BarChart, Bar,
@@ -65,6 +66,7 @@ function TickerCard({ symbol, price, change, vol, selected, onClick }: TickerCar
 }
 
 export default function MarketData() {
+  const { user } = useAuth();
   const [selected, setSelected] = useState('BTC/USDT');
   const [tickers, setTickers] = useState(() =>
     PAIRS.map(sym => ({

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Settings, Save, Eye, EyeOff, Check, RefreshCw, AlertTriangle, Shield, Bot, Coins, Database } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/auth';
 import { PanelHeader, Empty, Spinner } from '../components/ui';
 
 interface Setting {
@@ -58,6 +59,7 @@ function maskValue(v: string) {
 }
 
 export default function SettingsPage() {
+  const { user } = useAuth();
   const [settings, setSettings] = useState<Setting[]>([]);
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [visible, setVisible] = useState<Record<string, boolean>>({});
@@ -69,7 +71,7 @@ export default function SettingsPage() {
 
   async function load() {
     setLoading(true);
-    const { data } = await supabase.from('app_settings').select('*').order('category').order('key');
+    const { data } = await supabase.from('app_settings').select('*').eq('user_id', user?.id ?? '').order('category').order('key');
     if (data) {
       setSettings(data);
       const init: Record<string, string> = {};

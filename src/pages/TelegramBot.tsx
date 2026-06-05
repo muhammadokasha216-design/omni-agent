@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Send, Terminal, RefreshCw, Trash2, Plus, X, Check, Bot, Radio, WifiOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/auth';
 import { Panel, PanelHeader, Badge, Empty } from '../components/ui';
 import type { TelegramMessage } from '../lib/types';
 import { useAgent } from '../lib/agent';
@@ -32,6 +33,7 @@ function getBotReply(cmd: string): string {
 }
 
 export default function TelegramBot() {
+  const { user } = useAuth();
   const [messages, setMessages] = useState<TelegramMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -58,6 +60,7 @@ export default function TelegramBot() {
     const { data } = await supabase
       .from('telegram_messages')
       .select('*')
+      .eq('user_id', user?.id ?? '')
       .order('created_at', { ascending: true })
       .limit(50);
     if (data) setMessages(data);
@@ -72,6 +75,7 @@ export default function TelegramBot() {
     try {
       // Insert inbound message to DB
       await supabase.from('telegram_messages').insert({
+        user_id: user?.id ?? '',
         direction: 'inbound',
         chat_id: chatId,
         message_text: cmd,
@@ -91,6 +95,7 @@ export default function TelegramBot() {
         // Also generate a local reply (the real bot will reply via webhook)
         const reply = getBotReply(cmd);
         await supabase.from('telegram_messages').insert({
+          user_id: user?.id ?? '',
           direction: 'outbound',
           chat_id: chatId,
           message_text: `[SIMULATED] ${reply}`,
@@ -103,6 +108,7 @@ export default function TelegramBot() {
         await new Promise(r => setTimeout(r, 400 + Math.random() * 600));
         const reply = getBotReply(cmd);
         await supabase.from('telegram_messages').insert({
+          user_id: user?.id ?? '',
           direction: 'outbound',
           chat_id: chatId,
           message_text: reply,
