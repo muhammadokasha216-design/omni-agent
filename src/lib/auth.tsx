@@ -50,7 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const loadProfile = useCallback(async (uid: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('user_id', uid)
@@ -59,6 +59,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(data as UserProfile);
       // Update last_active
       await supabase.from('profiles').update({ last_active: new Date().toISOString() }).eq('user_id', uid);
+    } else if (error) {
+      // Profile might not exist yet (trigger race). Retry after short delay.
+      console.warn('Profile load failed, retrying in 1s...', error.message);
+      setTimeout(async () => {
+        const { data: retryData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('user_id', uid)
+          .maybeSingle();
+        if (retryData) setProfile(retryData as UserProfile);
+      }, 1000);
     }
   }, []);
 

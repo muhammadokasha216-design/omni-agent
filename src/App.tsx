@@ -93,14 +93,35 @@ function AppInner() {
     );
   }
 
-  // Fallback: account exists but status unclear (suspended, etc.)
+  // Fallback: account exists but status unclear — could be loading or suspended
+  if (!profile) {
+    // Profile still loading — show loading state instead of UNKNOWN
+    return (
+      <div className="min-h-screen bg-ares-bg flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="relative mx-auto w-16 h-16">
+            <div className="absolute inset-0 rounded-full border-2 border-ares-amber/20 animate-ping-slow" />
+            <div className="w-16 h-16 rounded-full bg-ares-surface border border-ares-borderLit flex items-center justify-center">
+              <Zap size={28} className="text-ares-amber animate-heartbeat" />
+            </div>
+          </div>
+          <div>
+            <div className="text-sm font-mono font-bold tracking-widest text-ares-amber glow-amber">ARES</div>
+            <div className="text-[10px] font-mono text-ares-textMuted mt-1 tracking-wider">LOADING PROFILE...</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Profile loaded but status is not active/pending/rejected
   return (
     <div className="min-h-screen bg-ares-bg flex items-center justify-center p-4">
       <div className="panel max-w-md w-full p-6 text-center space-y-4">
         <Zap size={32} className="text-ares-amber mx-auto" />
-        <div className="text-sm font-mono font-bold text-ares-amber">Account Status: {profile?.account_status?.toUpperCase() ?? 'UNKNOWN'}</div>
+        <div className="text-sm font-mono font-bold text-ares-amber">Account Status: {(profile.account_status ?? 'unknown').toUpperCase()}</div>
         <div className="text-[11px] font-mono text-ares-textMuted">
-          Your account is currently {profile?.account_status ?? 'unavailable'}. Please contact the administrator.
+          Your account is currently {profile.account_status ?? 'unavailable'}. Please contact the administrator.
         </div>
       </div>
     </div>
