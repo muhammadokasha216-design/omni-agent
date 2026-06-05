@@ -84,39 +84,56 @@ export default function TelegramBot() {
         processed_at: new Date().toISOString(),
       });
 
+      // Route to Ares AI Brain for smart responses
+      const isSmartCommand = !cmd.startsWith('/') || ['status', 'balance', 'help', 'alert', 'trades'].includes(cmd.split(' ')[0].slice(1));
+      const isNaturalLanguage = !cmd.startsWith('/');
+
+      let reply = '';
+
+      if (isNaturalLanguage || isSmartCommand) {
+        // Use Ares Brain for AI-powered response
+        try {
+          const { data } = await supabase.functions.invoke('ares-brain', {
+            body: {
+              action: isNaturalLanguage ? 'chat' : 'smart_command',
+              message: cmd,
+              user_id: user?.id,
+            },
+          });
+          if (data?.ok && data?.response) {
+            reply = data.response;
+          } else {
+            reply = getBotReply(cmd); // fallback
+          }
+        } catch {
+          reply = getBotReply(cmd); // fallback
+        }
+      } else {
+        reply = getBotReply(cmd);
+      }
+
       if (isLive) {
-        // LIVE mode: send the command as a real Telegram message via edge function
+        // LIVE mode: also send via real Telegram
         try {
           await supabase.functions.invoke('telegram-relay', {
             body: { action: 'send', message: cmd, chat_id: chatId },
           });
-        } catch { /* non-blocking — edge function may fail */ }
-
-        // Also generate a local reply (the real bot will reply via webhook)
-        const reply = getBotReply(cmd);
-        await supabase.from('telegram_messages').insert({
-          user_id: user?.id ?? '',
-          direction: 'outbound',
-          chat_id: chatId,
-          message_text: `[SIMULATED] ${reply}`,
-          command: null,
-          status: 'processed',
-          processed_at: new Date().toISOString(),
-        });
+        } catch { /* non-blocking */ }
       } else {
-        // SIMULATED mode: generate local reply after delay
-        await new Promise(r => setTimeout(r, 400 + Math.random() * 600));
-        const reply = getBotReply(cmd);
-        await supabase.from('telegram_messages').insert({
-          user_id: user?.id ?? '',
-          direction: 'outbound',
-          chat_id: chatId,
-          message_text: reply,
-          command: null,
-          status: 'processed',
-          processed_at: new Date().toISOString(),
-        });
+        // Simulated delay
+        await new Promise(r => setTimeout(r, 300 + Math.random() * 400));
       }
+
+      // Insert AI reply
+      await supabase.from('telegram_messages').insert({
+        user_id: user?.id ?? '',
+        direction: 'outbound',
+        chat_id: chatId,
+        message_text: reply,
+        command: null,
+        status: 'processed',
+        processed_at: new Date().toISOString(),
+      });
 
       loadMessages();
     } finally {

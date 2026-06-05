@@ -1,11 +1,33 @@
 import { useEffect, useState } from 'react';
 import {
   Users, Shield, Check, X, Clock, Mail, UserCog, RefreshCw,
-  Crown, Eye, Ban, ChevronDown, Search,
+  Crown, Eye, Ban, ChevronDown, Search, AlertTriangle, Trash2,
+  Send, Settings, TrendingUp,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth, type UserProfile } from '../lib/auth';
 import { StatCard, PanelHeader, Empty } from '../components/ui';
+
+interface ApprovalRequest {
+  id: string;
+  user_id: string;
+  action_type: string;
+  description: string;
+  metadata: Record<string, any>;
+  status: string;
+  responded_at: string | null;
+  created_at: string;
+}
+
+const ACTION_ICONS: Record<string, React.FC<any>> = {
+  delete_file: Trash2,
+  move_funds: TrendingUp,
+  public_post: Send,
+  security_change: Shield,
+  pause_trading: Ban,
+  change_settings: Settings,
+  other: AlertTriangle,
+};
 
 type StatusFilter = 'all' | 'pending' | 'active' | 'rejected' | 'suspended';
 
@@ -38,6 +60,7 @@ export default function AdminDashboard() {
   const [search, setSearch] = useState('');
   const [actioning, setActioning] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
+  const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
 
   useEffect(() => { load(); }, []);
 
@@ -45,6 +68,9 @@ export default function AdminDashboard() {
     setLoading(true);
     const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
     if (data) setUsers(data as UserProfile[]);
+    // Load approval requests
+    const { data: approvalData } = await supabase.from('approval_requests').select('*').eq('status', 'pending').order('created_at', { ascending: false });
+    if (approvalData) setApprovals(approvalData as ApprovalRequest[]);
     setLoading(false);
   }
 
@@ -278,6 +304,65 @@ export default function AdminDashboard() {
           </table>
         </div>
       </div>
+
+      {/* Approval Gate */}
+      {approvals.length > 0 && (
+        <div className="panel">
+          <PanelHeader
+            icon={<Shield size={13} />}
+            title="Sovereign Approval Gate"
+            badge={<span className="text-[9px] font-mono text-ares-amber bg-ares-amber/10 px-1.5 py-0.5 rounded">{approvals.length} PENDING</span>}
+            color="amber"
+          />
+          <div className="divide-y divide-ares-border">
+            {approvals.map(a => {
+              const ActionIcon = ACTION_ICONS[a.action_type] ?? AlertTriangle;
+              return (
+                <div key={a.id} className="flex items-start gap-3 px-4 py-3">
+                  <div className="w-8 h-8 rounded bg-ares-amber/10 border border-ares-amber/30 flex items-center justify-center flex-shrink-0">
+                    <ActionIcon size={14} className="text-ares-amber" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono font-bold text-ares-amber uppercase">{a.action_type.replace(/_/g, ' ')}</span>
+                      <span className="text-[8px] font-mono text-ares-textMuted">
+                        {new Date(a.created_at).toLocaleString('en-US', { hour12: false })}
+                      </span>
+                    </div>
+                    <div className="text-[10px] font-mono text-ares-text mt-0.5">{a.description}</div>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button
+                      onClick={async () => {
+                        await supabase.from('approval_requests').update({
+                          status: 'approved',
+                          responded_at: new Date().toISOString(),
+                        }).eq('id', a.id);
+                        load();
+                      }}
+                      className="btn btn-green py-0.5 px-2 text-[8px]"
+                    >
+                      <Check size={8} /> APPROVE
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await supabase.from('approval_requests').update({
+                          status: 'rejected',
+                          responded_at: new Date().toISOString(),
+                        }).eq('id', a.id);
+                        load();
+                      }}
+                      className="btn btn-red py-0.5 px-2 text-[8px]"
+                    >
+                      <X size={8} /> REJECT
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Quick actions */}
       <div className="panel p-4 space-y-3">

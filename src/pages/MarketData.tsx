@@ -82,15 +82,36 @@ export default function MarketData() {
 
   useEffect(() => {
     setCandles(genCandles(selected));
+
+    // Real-time price stream via Supabase Realtime
+    const channel = supabase
+      .channel('market-stream')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'market_snapshots',
+      }, (payload) => {
+        const snap = payload.new as any;
+        if (snap?.symbol) {
+          setTickers(prev => prev.map(t =>
+            t.symbol === snap.symbol
+              ? { ...t, price: Number(snap.price ?? t.price), change: Number(snap.change_pct ?? t.change) }
+              : t
+          ));
+        }
+      })
+      .subscribe();
+
+    // Smooth price animation loop (supplements Realtime with simulated micro-updates)
     tickRef.current = setInterval(() => {
       setTickers(prev => prev.map(t => ({
         ...t,
-        price: t.price * (1 + (Math.random() - 0.5) * 0.0008),
-        change: t.change + (Math.random() - 0.5) * 0.05,
+        price: t.price * (1 + (Math.random() - 0.5) * 0.0004),
+        change: t.change + (Math.random() - 0.5) * 0.02,
       })));
       setCandles(prev => {
         const last = prev[prev.length - 1];
-        const newPrice = last.close * (1 + (Math.random() - 0.5) * 0.003);
+        const newPrice = last.close * (1 + (Math.random() - 0.5) * 0.0015);
         const spread = Math.abs(newPrice - last.close) * 1.5;
         const newCandle: PricePoint = {
           t: `${prev.length}m`,
@@ -102,8 +123,12 @@ export default function MarketData() {
         };
         return [...prev.slice(-59), newCandle];
       });
-    }, 2000);
-    return () => { if (tickRef.current) clearInterval(tickRef.current); };
+    }, 1500); // Faster 1.5s updates for smooth streaming
+
+    return () => {
+      if (tickRef.current) clearInterval(tickRef.current);
+      supabase.removeChannel(channel);
+    };
   }, [selected]);
 
   const ticker = tickers.find(t => t.symbol === selected)!;
@@ -117,6 +142,7 @@ export default function MarketData() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-base font-bold font-mono tracking-widest text-ares-amber glow-amber uppercase">Market Data</h1>
+          <span className="ml-2 text-[8px] font-mono text-ares-green animate-pulse">● LIVE STREAM</span>
           <p className="text-[10px] font-mono text-ares-textMuted mt-0.5">Real-time streaming — 2s update interval</p>
         </div>
         <div className="flex gap-1">

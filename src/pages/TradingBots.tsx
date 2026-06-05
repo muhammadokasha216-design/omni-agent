@@ -1,9 +1,19 @@
 import { useEffect, useState } from 'react';
-import { TrendingUp, Plus, Play, Square, RefreshCw, X, Check, Trash2, BarChart2 } from 'lucide-react';
+import { TrendingUp, Plus, Play, Square, RefreshCw, X, Check, Trash2, BarChart2, ShieldAlert, AlertTriangle, Zap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { PanelHeader, StatusDot, Badge, Empty } from '../components/ui';
 import type { TradingBot, TradeExecution } from '../lib/types';
+
+interface RiskEvent {
+  id: string;
+  severity: 'info' | 'warning' | 'critical';
+  category: string;
+  title: string;
+  description: string;
+  is_resolved: boolean;
+  created_at: string;
+}
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell } from 'recharts';
 
 export default function TradingBots() {
@@ -15,6 +25,7 @@ export default function TradingBots() {
   const [addOpen, setAddOpen] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', exchange: 'binance', symbol: 'BTC/USDT', strategy: 'scalp' });
+  const [riskEvents, setRiskEvents] = useState<RiskEvent[]>([]);
 
   useEffect(() => {
     load();
@@ -37,6 +48,9 @@ export default function TradingBots() {
     ]);
     if (b.data) { setBots(b.data); if (!selected && b.data.length > 0) setSelected(b.data[0].id); }
     if (t.data) setTrades(t.data);
+    // Load risk events
+    const { data: risks } = await supabase.from('risk_events').select('*').eq('user_id', user?.id ?? '').order('created_at', { ascending: false }).limit(10);
+    if (risks) setRiskEvents(risks as RiskEvent[]);
   }
 
   async function loadBotTrades(botId: string) {
@@ -54,6 +68,36 @@ export default function TradingBots() {
     setToggling(bot.id);
     try {
       const active = !bot.is_active;
+
+      // AI Risk Manager: warn if activating with high exposure
+      if (active) {
+        const activeBots = bots.filter(b => b.is_active && b.id !== bot.id);
+        const activePnl = activeBots.reduce((s, b) => s + Number(b.pnl_usd), 0);
+        const totalExposure = activeBots.length + 1;
+        const currentLoss = Math.abs(totalPnl);
+
+        // Check if risk is too high
+        if (currentLoss > 100 && totalExposure >= 3) {
+          await supabase.from('risk_events').insert({
+            user_id: user?.id ?? '',
+            severity: 'critical',
+            category: 'position',
+            title: 'High Exposure Warning',
+            description: `Activating ${bot.name} would bring total active bots to ${totalExposure}. Current loss is $${currentLoss.toFixed(2)}. Consider reducing exposure.`,
+            is_resolved: false,
+          });
+        } else if (currentLoss > 50 && totalExposure >= 2) {
+          await supabase.from('risk_events').insert({
+            user_id: user?.id ?? '',
+            severity: 'warning',
+            category: 'balance',
+            title: 'Moderate Risk Detected',
+            description: `Current PnL is negative ($${currentLoss.toFixed(2)}). Adding ${bot.name} increases exposure. Monitor closely.`,
+            is_resolved: false,
+          });
+        }
+      }
+
       await supabase.from('trading_bots').update({ is_active: active, last_run: active ? new Date().toISOString() : bot.last_run }).eq('id', bot.id);
 
       // Simulate a trade when activating
@@ -216,6 +260,59 @@ export default function TradingBots() {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* AI Risk Manager */}
+      <div className="panel">
+        <div className="panel-header">
+          <ShieldAlert size={13} className="text-ares-red" />
+          <span className="text-[10px] font-mono font-bold tracking-widest text-ares-text">AI RISK MANAGER</span>
+          {riskEvents.filter(r => !r.is_resolved).length > 0 && (
+            <span className="ml-2 text-[9px] font-mono font-bold text-ares-red bg-ares-red/10 px-1.5 py-0.5 rounded">
+              {riskEvents.filter(r => !r.is_resolved).length} ACTIVE
+            </span>
+          )}
+          {totalPnl < -50 && (
+            <span className="ml-2 flex items-center gap-1 text-[9px] font-mono text-ares-amber">
+              <AlertTriangle size={9} /> LOSS EXCEEDS $50
+            </span>
+          )}
+        </div>
+        <div className="divide-y divide-ares-border">
+          {riskEvents.length === 0 && (
+            <div className="px-4 py-4 flex items-center gap-2 text-[10px] font-mono text-ares-green">
+              <Zap size={12} /> All clear — no risk events detected. Your positions are within safe parameters.
+            </div>
+          )}
+          {riskEvents.map(r => (
+            <div key={r.id} className="flex items-start gap-3 px-4 py-3">
+              <span className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${
+                r.severity === 'critical' ? 'bg-ares-red animate-pulse' : r.severity === 'warning' ? 'bg-ares-amber' : 'bg-ares-cyan'
+              }`} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-mono font-bold ${
+                    r.severity === 'critical' ? 'text-ares-red' : r.severity === 'warning' ? 'text-ares-amber' : 'text-ares-cyan'
+                  }`}>[{r.severity.toUpperCase()}]</span>
+                  <span className="text-[10px] font-mono font-semibold text-ares-text">{r.title}</span>
+                </div>
+                <div className="text-[9px] font-mono text-ares-textMuted mt-0.5">{r.description}</div>
+              </div>
+              {!r.is_resolved && (
+                <button
+                  onClick={async () => {
+                    await supabase.from('risk_events').update({ is_resolved: true }).eq('id', r.id);
+                    load();
+                  }}
+                  className="btn btn-ghost py-0.5 px-2 text-[8px]"
+                >
+                  <Check size={8} /> DISMISS
+                </button>
+              )}
+              {r.is_resolved && <span className="text-[8px] font-mono text-ares-textMuted">RESOLVED</span>}
+            </div>
+          ))}
         </div>
       </div>
 

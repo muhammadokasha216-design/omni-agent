@@ -11,6 +11,7 @@ import TradingSimulation from './pages/TradingSimulation';
 import AmazonMonitor from './pages/AmazonMonitor';
 import SettingsPage from './pages/SettingsPage';
 import AdminDashboard from './pages/AdminDashboard';
+import AgentOrchestration from './pages/AgentOrchestration';
 import AuthPage from './pages/AuthPage';
 import { supabase } from './lib/supabase';
 import { AuthProvider, useAuth } from './lib/auth';
@@ -78,6 +79,7 @@ function AppInner() {
       amazon:     <AmazonMonitor />,
       settings:   <SettingsPage />,
       admin:      <AdminDashboard />,
+      orchestration: <AgentOrchestration />,
     };
 
     return (

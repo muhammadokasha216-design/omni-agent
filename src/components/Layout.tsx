@@ -8,19 +8,20 @@ import {
 import { useAgent } from '../lib/agent';
 import { useAuth } from '../lib/auth';
 
-export type Page = 'dashboard' | 'heartbeat' | 'telegram' | 'trading' | 'market' | 'security' | 'simulation' | 'amazon' | 'settings' | 'admin';
+export type Page = 'dashboard' | 'heartbeat' | 'telegram' | 'trading' | 'market' | 'security' | 'simulation' | 'amazon' | 'settings' | 'admin' | 'orchestration';
 
 const NAV_ALL: { id: Page; label: string; icon: React.FC<any>; color: string; group?: string; adminOnly?: boolean }[] = [
-  { id: 'dashboard',  label: 'Command Center', icon: LayoutDashboard, color: 'text-ares-amber' },
-  { id: 'heartbeat',  label: 'Heartbeat',       icon: Activity,       color: 'text-ares-green' },
-  { id: 'telegram',   label: 'Telegram Bot',    icon: Send,           color: 'text-ares-cyan'  },
-  { id: 'trading',    label: 'Trading Bots',    icon: TrendingUp,     color: 'text-ares-green' },
-  { id: 'market',     label: 'Market Data',     icon: BarChart2,      color: 'text-ares-amber' },
-  { id: 'security',   label: 'Security',        icon: ShieldCheck,    color: 'text-ares-red'   },
-  { id: 'simulation', label: 'Trade Sim',       icon: FlaskConical,   color: 'text-ares-amber', group: 'AUTO-PILOT' },
-  { id: 'amazon',     label: 'Amazon Monitor',  icon: ShoppingCart,   color: 'text-ares-cyan',  group: 'AUTO-PILOT' },
-  { id: 'admin',      label: 'Owner Dashboard', icon: Crown,          color: 'text-ares-amber', group: 'ADMIN', adminOnly: true },
-  { id: 'settings',   label: 'Settings',        icon: Settings,       color: 'text-ares-textSub', group: 'CONFIG' },
+  { id: 'dashboard',      label: 'Command Center',  icon: LayoutDashboard, color: 'text-ares-amber' },
+  { id: 'orchestration',  label: '10 Arms Agent',   icon: Zap,             color: 'text-ares-amber' },
+  { id: 'heartbeat',      label: 'Heartbeat',       icon: Activity,        color: 'text-ares-green' },
+  { id: 'telegram',       label: 'Telegram Bot',    icon: Send,            color: 'text-ares-cyan'  },
+  { id: 'trading',        label: 'Trading Bots',    icon: TrendingUp,      color: 'text-ares-green' },
+  { id: 'market',         label: 'Market Data',     icon: BarChart2,       color: 'text-ares-amber' },
+  { id: 'security',       label: 'Security',        icon: ShieldCheck,     color: 'text-ares-red'   },
+  { id: 'simulation',     label: 'Trade Sim',       icon: FlaskConical,    color: 'text-ares-amber', group: 'AUTO-PILOT' },
+  { id: 'amazon',         label: 'Amazon Monitor',  icon: ShoppingCart,    color: 'text-ares-cyan',  group: 'AUTO-PILOT' },
+  { id: 'admin',          label: 'Owner Dashboard',  icon: Crown,           color: 'text-ares-amber', group: 'ADMIN', adminOnly: true },
+  { id: 'settings',       label: 'Settings',        icon: Settings,        color: 'text-ares-textSub', group: 'CONFIG' },
 ];
 
 interface SidebarProps {
