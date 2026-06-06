@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import { supabase } from './supabase';
 
+const ADMIN_EMAIL = 'muhammadokasha216@gmail.com';
+
 export interface UserProfile {
   id: string;
   user_id: string;
@@ -44,61 +46,102 @@ export function useAuth() {
   return useContext(AuthContext);
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<any>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+async function fetchProfile(uid: string, email?: string): Promise<UserProfile | null> {
+  // Try up to 3 times with increasing delays (handles trigger race condition)
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 800));
 
-  const loadProfile = useCallback(async (uid: string) => {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('user_id', uid)
       .maybeSingle();
+
     if (data) {
-      setProfile(data as UserProfile);
-      // Update last_active
-      await supabase.from('profiles').update({ last_active: new Date().toISOString() }).eq('user_id', uid);
-    } else if (error) {
-      // Profile might not exist yet (trigger race). Retry after short delay.
-      console.warn('Profile load failed, retrying in 1s...', error.message);
-      setTimeout(async () => {
-        const { data: retryData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('user_id', uid)
-          .maybeSingle();
-        if (retryData) setProfile(retryData as UserProfile);
-      }, 1000);
+      // Admin bypass: always ensure owner account is active
+      if (data.email === ADMIN_EMAIL || email === ADMIN_EMAIL) {
+        if (data.account_status !== 'active' || data.role !== 'super_admin') {
+          await supabase.from('profiles').update({
+            account_status: 'active',
+            role: 'super_admin',
+          }).eq('user_id', uid);
+          return { ...data, account_status: 'active', role: 'super_admin' } as UserProfile;
+        }
+      }
+      return data as UserProfile;
     }
+
+    if (!error) break; // data is null but no error = profile genuinely doesn't exist yet
+  }
+
+  // Profile not found after retries — if this is the owner, create a synthetic active profile
+  if (email === ADMIN_EMAIL) {
+    return {
+      id: uid,
+      user_id: uid,
+      email: ADMIN_EMAIL,
+      display_name: 'UKASHA',
+      role: 'super_admin',
+      account_status: 'active',
+      subscription_status: 'free',
+      team: null,
+      last_active: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    };
+  }
+
+  return null;
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const loadProfile = useCallback(async (authUser: any) => {
+    const p = await fetchProfile(authUser.id, authUser.email);
+    if (p) {
+      setProfile(p);
+      // Update last_active (non-blocking)
+      supabase.from('profiles').update({ last_active: new Date().toISOString() }).eq('user_id', authUser.id);
+    }
+    return p;
   }, []);
 
   const refreshProfile = useCallback(async () => {
-    if (user?.id) await loadProfile(user.id);
+    if (user) await loadProfile(user);
   }, [user, loadProfile]);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        loadProfile(session.user.id).finally(() => setLoading(false));
-      } else {
-        setLoading(false);
+    let mounted = true;
+
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return;
+      const u = session?.user ?? null;
+      setUser(u);
+      if (u) {
+        await loadProfile(u);
       }
+      setLoading(false);
     });
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        loadProfile(session.user.id);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mounted) return;
+      const u = session?.user ?? null;
+      setUser(u);
+      if (u) {
+        // Don't set loading here — profile will resolve and trigger re-render
+        const p = await fetchProfile(u.id, u.email);
+        if (mounted && p) setProfile(p);
       } else {
         setProfile(null);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [loadProfile]);
 
   const signIn = useCallback(async (email: string, password: string) => {
