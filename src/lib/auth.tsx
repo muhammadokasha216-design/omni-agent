@@ -150,11 +150,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signUp = useCallback(async (email: string, password: string, displayName: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { display_name: displayName } },
     });
+    if (!error && data.user) {
+      // Notify admin via Telegram (non-blocking)
+      supabase.functions.invoke('telegram-relay', {
+        body: { action: 'new_signup', user_email: email, user_id: data.user.id },
+      }).catch(() => { /* non-blocking */ });
+    }
     return { error: error?.message ?? null };
   }, []);
 
