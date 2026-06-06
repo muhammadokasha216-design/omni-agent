@@ -14,6 +14,7 @@ import SettingsPage from './pages/SettingsPage';
 import AdminDashboard from './pages/AdminDashboard';
 import AgentOrchestration from './pages/AgentOrchestration';
 import AuthPage from './pages/AuthPage';
+import PendingPage from './pages/PendingPage';
 import { supabase } from './lib/supabase';
 import { AuthProvider, useAuth } from './lib/auth';
 import { SettingsProvider } from './lib/settings';
@@ -39,7 +40,7 @@ function Spinner({ label }: { label: string }) {
 }
 
 function AppInner() {
-  const { user, profile, loading, isActive, isPending } = useAuth();
+  const { user, profile, loading, profileMissing, isApproved, isActive } = useAuth();
   const [page, setPage] = useState<Page>('dashboard');
   const [unreadAlerts, setUnreadAlerts] = useState(0);
 
@@ -62,8 +63,21 @@ function AppInner() {
   // 2. No session → login/signup
   if (!user) return <AuthPage />;
 
-  // 3. Session exists but profile not yet resolved → wait for it
-  if (!profile) return <Spinner label="AUTHENTICATING..." />;
+  // [v0] Debug: show exactly which gate branch we land on after login.
+  console.log('[v0][gate] decision', {
+    hasProfile: !!profile,
+    profileMissing,
+    is_approved: profile?.is_approved,
+    isApproved,
+    account_status: profile?.account_status,
+  });
+
+  // 3. Session exists, profile row not created yet (trigger lag) → treat as pending,
+  //    never hang on an infinite "AUTHENTICATING..." spinner.
+  if (!profile) {
+    if (profileMissing) return <PendingPage />;
+    return <Spinner label="AUTHENTICATING..." />;
+  }
 
   // 4. Rejected account
   if (profile.account_status === 'rejected') {
@@ -81,41 +95,12 @@ function AppInner() {
     );
   }
 
-  // 5. Pending approval
-  if (isPending) {
-    return (
-      <div className="min-h-screen bg-ares-bg flex items-center justify-center p-4">
-        <div className="panel max-w-md w-full p-6 text-center space-y-4">
-          <Zap size={32} className="text-ares-amber mx-auto animate-heartbeat" />
-          <div className="text-sm font-mono font-bold text-ares-amber">AWAITING CLEARANCE</div>
-          <div className="text-[11px] font-mono text-ares-textMuted">
-            Your account is pending administrator approval. You will be notified when access is granted.
-          </div>
-          <button onClick={() => supabase.auth.signOut()} className="btn btn-ghost text-xs">Sign Out</button>
-        </div>
-      </div>
-    );
+  // 5. Not yet approved → custom Pending Approval page
+  if (!isApproved) {
+    return <PendingPage />;
   }
 
-  // 6. Suspended or unknown status
-  if (!isActive) {
-    return (
-      <div className="min-h-screen bg-ares-bg flex items-center justify-center p-4">
-        <div className="panel max-w-md w-full p-6 text-center space-y-4">
-          <Zap size={32} className="text-ares-amber mx-auto" />
-          <div className="text-sm font-mono font-bold text-ares-amber">
-            Account Status: {profile.account_status.toUpperCase()}
-          </div>
-          <div className="text-[11px] font-mono text-ares-textMuted">
-            Your account is {profile.account_status}. Please contact the administrator.
-          </div>
-          <button onClick={() => supabase.auth.signOut()} className="btn btn-ghost text-xs">Sign Out</button>
-        </div>
-      </div>
-    );
-  }
-
-  // 7. Active — show dashboard
+  // 6. Approved — show dashboard
   const pages: Record<Page, React.ReactNode> = {
     dashboard:     <Dashboard onNav={setPage} />,
     heartbeat:     <HeartbeatMonitor />,

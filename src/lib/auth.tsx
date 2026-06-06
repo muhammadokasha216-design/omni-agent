@@ -8,6 +8,8 @@ export interface UserProfile {
   user_id: string;
   email: string;
   display_name: string;
+  is_approved: boolean;
+  is_admin: boolean;
   role: 'super_admin' | 'admin' | 'member' | 'viewer';
   account_status: 'pending' | 'active' | 'rejected' | 'suspended';
   subscription_status: 'free' | 'trial' | 'pro' | 'enterprise';
@@ -20,9 +22,11 @@ interface AuthCtx {
   user: any | null;
   profile: UserProfile | null;
   loading: boolean;
+  profileMissing: boolean;
   isAdmin: boolean;
   isActive: boolean;
   isPending: boolean;
+  isApproved: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, displayName: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -33,9 +37,11 @@ const AuthContext = createContext<AuthCtx>({
   user: null,
   profile: null,
   loading: true,
+  profileMissing: false,
   isAdmin: false,
   isActive: false,
   isPending: false,
+  isApproved: false,
   signIn: async () => ({ error: null }),
   signUp: async () => ({ error: null }),
   signOut: async () => {},
@@ -97,13 +103,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileMissing, setProfileMissing] = useState(false);
 
   const loadProfile = useCallback(async (authUser: any) => {
     const p = await fetchProfile(authUser.id, authUser.email);
+
+    // [v0] Debug: print exactly why the app does/doesn't advance past "Authenticating..."
+    console.group('[v0][approval] profile resolved');
+    console.log('user id:', authUser.id, 'email:', authUser.email);
+    console.log('profile found:', !!p);
+    console.log('is_approved:', p?.is_approved);
+    console.log('account_status:', p?.account_status);
+    console.log('is_admin:', p?.is_admin, 'role:', p?.role);
+    console.groupEnd();
+
     if (p) {
       setProfile(p);
+      setProfileMissing(false);
       // Update last_active (non-blocking)
       supabase.from('profiles').update({ last_active: new Date().toISOString() }).eq('user_id', authUser.id);
+    } else {
+      // No profile row exists yet — flag it so the gate can react instead of hanging forever.
+      setProfileMissing(true);
     }
     return p;
   }, []);
@@ -130,11 +151,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const u = session?.user ?? null;
       setUser(u);
       if (u) {
-        // Don't set loading here — profile will resolve and trigger re-render
-        const p = await fetchProfile(u.id, u.email);
-        if (mounted && p) setProfile(p);
+        // Don't set loading here — loadProfile resolves the profile, logs the
+        // approval status, and toggles profileMissing so the gate never hangs.
+        await loadProfile(u);
       } else {
         setProfile(null);
+        setProfileMissing(false);
       }
     });
 
@@ -209,15 +231,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setProfile(null);
+    setProfileMissing(false);
   }, []);
 
-  const isAdmin = profile?.role === 'super_admin' || profile?.role === 'admin';
+  const isAdmin = profile?.is_admin === true || profile?.role === 'super_admin' || profile?.role === 'admin';
+  const isApproved = profile?.is_approved === true || profile?.account_status === 'active';
   const isActive = profile?.account_status === 'active';
-  const isPending = profile?.account_status === 'pending';
+  const isPending = !isApproved && profile?.account_status !== 'rejected' && profile?.account_status !== 'suspended';
 
   return (
     <AuthContext.Provider value={{
-      user, profile, loading, isAdmin, isActive, isPending,
+      user, profile, loading, profileMissing, isAdmin, isActive, isPending, isApproved,
       signIn, signUp, signOut, refreshProfile,
     }}>
       {children}
