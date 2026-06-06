@@ -145,8 +145,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadProfile]);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+      if (error) {
+        // [v0] Full Supabase auth error dump — classify Auth vs Config vs Network.
+        const status = (error as any).status;
+        const code = (error as any).code;
+        let classification: 'AUTH' | 'CONFIG' | 'NETWORK' | 'UNKNOWN' = 'UNKNOWN';
+
+        if (code === 'invalid_credentials' || status === 400) {
+          classification = 'AUTH'; // wrong email/password, or user not in THIS project
+        } else if (code === 'email_not_confirmed') {
+          classification = 'AUTH';
+        } else if (status === 401 || status === 403) {
+          classification = 'CONFIG'; // bad/missing anon key or wrong project
+        } else if (typeof status === 'undefined') {
+          classification = 'NETWORK'; // request never reached Supabase (CORS/DNS/offline)
+        }
+
+        console.group('[v0][signIn] FAILED');
+        console.log('classification:', classification);
+        console.log('message:', error.message);
+        console.log('status:', status);
+        console.log('code:', code);
+        console.log('name:', error.name);
+        console.log('full error object:', error);
+        console.log('raw JSON:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+        console.groupEnd();
+
+        return { error: error.message };
+      }
+
+      console.log('[v0][signIn] OK — user id:', data.user?.id, 'email:', data.user?.email);
+      return { error: null };
+    } catch (e: any) {
+      // Thrown (not returned) errors are almost always transport-level failures.
+      console.group('[v0][signIn] THREW (NETWORK / transport)');
+      console.log('classification: NETWORK');
+      console.log('message:', e?.message);
+      console.log('name:', e?.name);
+      console.log('full thrown object:', e);
+      console.groupEnd();
+      return { error: e?.message ?? 'Network error reaching Supabase' };
+    }
   }, []);
 
   const signUp = useCallback(async (email: string, password: string, displayName: string) => {
