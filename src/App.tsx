@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Zap } from 'lucide-react';
+import { Analytics } from '@vercel/analytics/react';
 import Layout, { type Page } from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import HeartbeatMonitor from './pages/HeartbeatMonitor';
@@ -144,6 +145,7 @@ export default function App() {
   return (
     <AuthProvider>
       <AppInner />
+      <Analytics />
     </AuthProvider>
   );
 }
