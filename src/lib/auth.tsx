@@ -58,13 +58,18 @@ async function fetchProfile(uid: string, email?: string): Promise<UserProfile | 
       .maybeSingle();
 
     if (data) {
-      // Admin bypass: always ensure owner account is active
+      // Admin bypass: always ensure owner account is active and super_admin
       if (data.email === ADMIN_EMAIL || email === ADMIN_EMAIL) {
         if (data.account_status !== 'active' || data.role !== 'super_admin') {
-          await supabase.from('profiles').update({
-            account_status: 'active',
-            role: 'super_admin',
-          }).eq('user_id', uid);
+          // Emergency override: restore corrupted super_admin profile
+          try {
+            await supabase.from('profiles').update({
+              account_status: 'active',
+              role: 'super_admin',
+            }).eq('user_id', uid);
+          } catch (e) {
+            console.error('[Ares] Failed to restore super_admin profile:', e);
+          }
           return { ...data, account_status: 'active', role: 'super_admin' } as UserProfile;
         }
       }
