@@ -1,9 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from './supabase';
 
 const SESSION_KEY = 'ares_session_id';
-const url = import.meta.env.VITE_SUPABASE_URL as string;
-const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-const _client = createClient(url, key);
 
 export class SessionManager {
   private static id: string | null = null;
@@ -11,7 +8,7 @@ export class SessionManager {
   static async initialize(): Promise<void> {
     let id = localStorage.getItem(SESSION_KEY);
     if (!id) {
-      const { data, error } = await _client
+      const { data, error } = await supabase
         .from('sessions')
         .insert({ session_token: crypto.randomUUID(), operator_name: 'Ares Operator' })
         .select()
@@ -33,3 +30,4 @@ export class SessionManager {
     this.id = null;
   }
 }
+

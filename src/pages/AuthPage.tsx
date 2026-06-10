@@ -24,18 +24,19 @@ export default function AuthPage() {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
+    const trimmedEmail = email.trim().toLowerCase();
 
     if (view === 'signup') {
       if (!displayName.trim()) { setError('Display name is required'); setSubmitting(false); return; }
       if (password.length < 6) { setError('Password must be at least 6 characters'); setSubmitting(false); return; }
-      const { error: err } = await signUp(email, password, displayName);
+      const { error: err } = await signUp(trimmedEmail, password, displayName.trim());
       if (err) { setError(err); setSubmitting(false); return; }
       setSignedUp(true);
       setSubmitting(false);
       return;
     }
 
-    const { error: err } = await signIn(email, password);
+    const { error: err } = await signIn(trimmedEmail, password);
     if (err) { setError(err); }
     setSubmitting(false);
   }
@@ -92,6 +93,8 @@ export default function AuthPage() {
             {(['login', 'signup'] as const).map(v => (
               <button
                 key={v}
+                type="button"
+                id={`auth-tab-${v}`}
                 onClick={() => { setView(v); setError(null); }}
                 className={`flex-1 py-2.5 text-[11px] font-mono font-bold tracking-widest transition-all
                   ${view === v
@@ -109,6 +112,7 @@ export default function AuthPage() {
               <div>
                 <label className="text-[9px] font-mono text-ares-textMuted block mb-1.5 tracking-wider">DISPLAY NAME</label>
                 <input
+                  id="auth-display-name"
                   type="text"
                   value={displayName}
                   onChange={e => setDisplayName(e.target.value)}
@@ -122,6 +126,7 @@ export default function AuthPage() {
             <div>
               <label className="text-[9px] font-mono text-ares-textMuted block mb-1.5 tracking-wider">EMAIL</label>
               <input
+                id="auth-email"
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
@@ -136,6 +141,7 @@ export default function AuthPage() {
               <label className="text-[9px] font-mono text-ares-textMuted block mb-1.5 tracking-wider">PASSWORD</label>
               <div className="relative">
                 <input
+                  id="auth-password"
                   type={showPw ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
@@ -160,7 +166,7 @@ export default function AuthPage() {
               </div>
             )}
 
-            <button type="submit" disabled={submitting} className="btn btn-amber w-full justify-center py-2.5 text-xs">
+            <button id="auth-submit" type="submit" disabled={submitting} className="btn btn-amber w-full justify-center py-2.5 text-xs">
               {submitting ? (
                 <span className="flex items-center gap-2">Authenticating<span className="animate-pulse">...</span></span>
               ) : (

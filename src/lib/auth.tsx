@@ -46,6 +46,20 @@ export function useAuth() {
   return useContext(AuthContext);
 }
 
+// ─── Error mapping ───────────────────────────────────────────────
+const ERROR_MAP: Record<string, string> = {
+  'Invalid login credentials': 'Incorrect email or password.',
+  'Email not confirmed': 'Please verify your email before signing in.',
+  'User already registered': 'An account with this email already exists.',
+  'Signup requires a valid password': 'Password is required.',
+  'Password should be at least 6 characters': 'Password must be at least 6 characters.',
+};
+
+function mapAuthError(raw: string): string {
+  return ERROR_MAP[raw] ?? 'Authentication failed. Please try again.';
+}
+
+// ─── Profile fetching with retry ─────────────────────────────────
 async function fetchProfile(uid: string, email?: string): Promise<UserProfile | null> {
   // Try up to 3 times with increasing delays (handles trigger race condition)
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -57,6 +71,11 @@ async function fetchProfile(uid: string, email?: string): Promise<UserProfile | 
       .eq('user_id', uid)
       .maybeSingle();
 
+    if (error) {
+      console.warn(`[Ares] Profile fetch attempt ${attempt + 1} failed:`, error.message);
+      continue; // retry on error
+    }
+
     if (data) {
       // Admin bypass: always ensure owner account is active and super_admin
       if (data.email === ADMIN_EMAIL || email === ADMIN_EMAIL) {
@@ -67,6 +86,7 @@ async function fetchProfile(uid: string, email?: string): Promise<UserProfile | 
               account_status: 'active',
               role: 'super_admin',
             }).eq('user_id', uid);
+            console.info('[Ares] Restored super_admin profile for owner account.');
           } catch (e) {
             console.error('[Ares] Failed to restore super_admin profile:', e);
           }
@@ -76,11 +96,13 @@ async function fetchProfile(uid: string, email?: string): Promise<UserProfile | 
       return data as UserProfile;
     }
 
-    if (!error) break; // data is null but no error = profile genuinely doesn't exist yet
+    // data is null and no error = profile genuinely doesn't exist yet, keep retrying
+    // (the trigger may not have fired yet)
   }
 
   // Profile not found after retries — if this is the owner, create a synthetic active profile
   if (email === ADMIN_EMAIL) {
+    console.info('[Ares] Creating synthetic super_admin profile for owner account.');
     return {
       id: uid,
       user_id: uid,
@@ -95,9 +117,11 @@ async function fetchProfile(uid: string, email?: string): Promise<UserProfile | 
     };
   }
 
+  console.warn('[Ares] Profile not found after retries for user:', uid);
   return null;
 }
 
+// ─── Auth Provider ───────────────────────────────────────────────
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -105,8 +129,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadProfile = useCallback(async (authUser: any) => {
     const p = await fetchProfile(authUser.id, authUser.email);
+    setProfile(p);
     if (p) {
-      setProfile(p);
       // Update last_active (non-blocking)
       supabase.from('profiles').update({ last_active: new Date().toISOString() }).eq('user_id', authUser.id);
     }
@@ -137,7 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (u) {
         // Don't set loading here — profile will resolve and trigger re-render
         const p = await fetchProfile(u.id, u.email);
-        if (mounted && p) setProfile(p);
+        if (mounted) setProfile(p);
       } else {
         setProfile(null);
       }
@@ -149,22 +173,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [loadProfile]);
 
+  // ─── Sign In ─────────────────────────────────────────────────
   const signIn = useCallback(async (email: string, password: string) => {
+    console.info('[Ares] Sign-in attempt for:', email);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
+    if (error) {
+      console.warn('[Ares] Sign-in failed:', error.message);
+      return { error: mapAuthError(error.message) };
+    }
+    console.info('[Ares] Sign-in successful for:', email);
+    return { error: null };
   }, []);
 
+  // ─── Sign Up ─────────────────────────────────────────────────
   const signUp = useCallback(async (email: string, password: string, displayName: string) => {
+    console.info('[Ares] Sign-up attempt for:', email);
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { display_name: displayName } },
     });
-    if (!error && data.user) {
+
+    if (error) {
+      console.warn('[Ares] Sign-up error:', error.message);
+      return { error: mapAuthError(error.message) };
+    }
+
+    // Detect "fake user" — Supabase returns a user with empty identities when email already exists
+    // (if "Confirm email" is disabled, the existing user object is returned without error)
+    if (data.user && (!data.user.identities || data.user.identities.length === 0)) {
+      console.warn('[Ares] Sign-up detected existing email (empty identities):', email);
+      return { error: 'An account with this email already exists. Please sign in instead.' };
+    }
+
+    if (data.user) {
+      const newUser = data.user;
+      console.info('[Ares] Sign-up successful, user created:', newUser.id);
+
       // Notify admin via Telegram with LLM processing (non-blocking)
       (async () => {
         try {
-          const userId = data.user.id;
+          const userId = newUser.id;
           const prompt = `A new user just signed up.\nEmail: ${email}\nUser ID: ${userId}\nDisplay Name: ${displayName}\nPlease generate a notification for the administrators. Format it so it looks good on Telegram. Include the exact commands to approve or reject: /approve ${userId} and /reject ${userId}`;
           
           const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
@@ -183,19 +232,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await supabase.functions.invoke('telegram-relay', {
             body: { action: 'send', message: finalMessage },
           });
+          console.info('[Ares] Telegram notification sent for new signup.');
         } catch (e) {
           console.error('[Ares] LLM Telegram relay error:', e);
           // Fallback to direct relay call in case of backend network failure
           supabase.functions.invoke('telegram-relay', {
-            body: { action: 'new_signup', user_email: email, user_id: data.user.id },
+            body: { action: 'new_signup', user_email: email, user_id: newUser.id },
           }).catch(() => {});
         }
       })();
     }
-    return { error: error?.message ?? null };
+
+    return { error: null };
   }, []);
 
+  // ─── Sign Out ────────────────────────────────────────────────
   const signOut = useCallback(async () => {
+    console.info('[Ares] Signing out.');
     await supabase.auth.signOut();
     setProfile(null);
   }, []);
