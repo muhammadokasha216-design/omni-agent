@@ -44,6 +44,34 @@ async def lifespan(app: FastAPI):
     try:
         await init_db()
         logger.info("OSE — Omni-System Executive started successfully")
+        
+        # Initialize Telegram Bot and register Webhook automatically
+        import os
+        from app.services.telegram_bot import init_telegram_app, get_bot_token
+        tg_token = await get_bot_token()
+        if tg_token:
+            from app.db.supabase_client import supabase
+            url_res = supabase.table("app_settings").select("value").eq("key", "webhook_url").execute()
+            webhook_url = url_res.data[0]["value"].strip() if url_res.data else os.getenv("WEBHOOK_URL", "")
+            
+            secret_res = supabase.table("app_settings").select("value").eq("key", "telegram_webhook_secret").execute()
+            webhook_secret = secret_res.data[0]["value"].strip() if secret_res.data else "ARES_GUARD_TOKEN_99X"
+            
+            if webhook_url:
+                from telegram import Bot
+                bot = Bot(token=tg_token)
+                webhook_target_url = f"{webhook_url}/webhook/telegram/{webhook_secret}"
+                logger.info(f"📡 Setting Telegram Webhook target to: {webhook_target_url}")
+                await bot.set_webhook(url=webhook_target_url, allowed_updates=["message", "callback_query"])
+                
+            # Initialize python-telegram-bot application context
+            await init_telegram_app()
+        
+        if settings.ENABLE_MARKET_STREAMING:
+            import asyncio
+            from app.services.market_ingestion import run_binance_websocket
+            app.state.binance_task = asyncio.create_task(run_binance_websocket())
+            logger.info("✓ Binance WebSocket background ingestion engine initialized")
     except Exception as e:
         logger.critical(f"Startup failed: {e}")
         raise
@@ -51,6 +79,22 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    from app.services.telegram_bot import _telegram_app
+    if _telegram_app is not None:
+        logger.info("Stopping Telegram Bot Application...")
+        await _telegram_app.stop()
+        await _telegram_app.shutdown()
+
+    if hasattr(app.state, "binance_task"):
+        logger.info("Stopping Binance WebSocket background ingestion engine...")
+        app.state.binance_task.cancel()
+        try:
+            await app.state.binance_task
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error(f"Error shutting down Binance WebSocket ingestion: {e}")
+
     realtime_manager.close_all()
     await close_db()
     logger.info("OSE — Application shutdown complete")
@@ -80,6 +124,7 @@ def create_app() -> FastAPI:
     app.include_router(routes.agents.router)
     app.include_router(routes.trading.router)
     app.include_router(routes.realtime.router)
+    app.include_router(routes.telegram_webhook.router)
 
     # Health check
     @app.get("/")
