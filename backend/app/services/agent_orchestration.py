@@ -13,6 +13,7 @@ class AgentRole(Enum):
     RISK_MANAGER = "risk_manager"
     EXECUTION_ENGINE = "execution_engine"
     STRATEGIC_ADVISOR = "strategic_advisor"
+    USER_ONBOARDING = "user_onboarding"
 
 @dataclass
 class AgentConfig:
@@ -84,6 +85,14 @@ class OmniAgentBrain:
                 name="Strategic Advisor",
                 system_prompt="""You are a strategic advisor. Synthesize inputs from other agents, provide
                 high-level recommendations, and ensure overall portfolio alignment with goals.""",
+            ),
+            AgentConfig(
+                role=AgentRole.USER_ONBOARDING,
+                name="User Onboarding Specialist",
+                system_prompt="""You are a user onboarding specialist for the ARES system. 
+                When a new user signs up, your job is to generate a concise, engaging, and professional 
+                notification message for the system administrators to be sent via Telegram. 
+                Always include the exact commands to approve or reject the user: /approve [ID] and /reject [ID].""",
             ),
         ]
 

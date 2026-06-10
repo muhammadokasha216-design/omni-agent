@@ -161,10 +161,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       options: { data: { display_name: displayName } },
     });
     if (!error && data.user) {
-      // Notify admin via Telegram (non-blocking)
-      supabase.functions.invoke('telegram-relay', {
-        body: { action: 'new_signup', user_email: email, user_id: data.user.id },
-      }).catch(() => { /* non-blocking */ });
+      // Notify admin via Telegram with LLM processing (non-blocking)
+      (async () => {
+        try {
+          const userId = data.user.id;
+          const prompt = `A new user just signed up.\nEmail: ${email}\nUser ID: ${userId}\nDisplay Name: ${displayName}\nPlease generate a notification for the administrators. Format it so it looks good on Telegram. Include the exact commands to approve or reject: /approve ${userId} and /reject ${userId}`;
+          
+          const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+          const aiRes = await fetch(`${backendUrl}/api/agents/agent/user_onboarding/prompt?prompt=${encodeURIComponent(prompt)}`, {
+            method: 'POST'
+          });
+          
+          let finalMessage = '';
+          if (aiRes.ok) {
+            const aiData = await aiRes.json();
+            finalMessage = aiData.response;
+          } else {
+            finalMessage = `🆕 *New User Registration Request*\n\n📧 Email: \`${email}\`\n🆔 ID: \`${userId}\`\n\nReply with:\n/approve ${userId}\n/reject ${userId}`;
+          }
+
+          await supabase.functions.invoke('telegram-relay', {
+            body: { action: 'send', message: finalMessage },
+          });
+        } catch (e) {
+          console.error('[Ares] LLM Telegram relay error:', e);
+          // Fallback to direct relay call in case of backend network failure
+          supabase.functions.invoke('telegram-relay', {
+            body: { action: 'new_signup', user_email: email, user_id: data.user.id },
+          }).catch(() => {});
+        }
+      })();
     }
     return { error: error?.message ?? null };
   }, []);
