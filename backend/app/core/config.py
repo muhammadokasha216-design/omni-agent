@@ -27,8 +27,11 @@ class Settings(BaseSettings):
     DB_ECHO: bool = Field(default=False, description="Echo SQL queries")
 
     # AI Configuration
-    ANTHROPIC_API_KEY: str = Field(..., description="Anthropic API key for Claude")
+    ANTHROPIC_API_KEY: Optional[str] = Field(default=None, description="Anthropic API key for Claude (optional if using local Ollama)")
     ANTHROPIC_MODEL: str = Field(default="claude-3-5-sonnet-20241022", description="Claude model to use")
+    OLLAMA_URL: str = Field(default="http://localhost:11434", description="Ollama API base URL")
+    OLLAMA_MODEL: str = Field(default="llama3", description="Ollama model for chat completions")
+    OLLAMA_EMBEDDING_MODEL: str = Field(default="nomic-embed-text", description="Ollama model for vector embeddings")
 
     # Security
     API_KEY_SECRET: str = Field(..., description="Secret key for API authentication")
